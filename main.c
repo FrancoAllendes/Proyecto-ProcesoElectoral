@@ -79,13 +79,13 @@ int ingresarOpcion();
 void normalizarRUT(char* rutLimpio, char* rutSocio);
 
 /* --- Gestion del Registro Electoral (Votantes) --- */
-void menuGestionVotantes(struct SistemaElectoral *sistema);
+void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual);
 void agregarVotante(struct SistemaElectoral *sistema);
 struct NodoVotante* buscarVotante(struct SistemaElectoral *sistema, char* rutBuscado); 
 int modificarVotante(struct SistemaElectoral *sistema, char* rutModificar); 
 int eliminarVotante(struct SistemaElectoral *sistema, char* rutEliminar); 
 void listarVotantes(struct SistemaElectoral *sistema);
-int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual); 
+int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual);
 
 /* --- Gestion de Candidaturas --- */
 void menuGestionCandidatos(struct NodoEleccion *eleccionActual);
@@ -157,7 +157,7 @@ int main() {
         switch (opcion) {
             case 1:
                 /* Llama al submenu de Votantes */
-                menuGestionVotantes(&sistema);
+                menuGestionVotantes(&sistema, eleccionActual);;
                 break;
             case 2:
                 /* Llama al submenu de Candidatos */
@@ -616,4 +616,654 @@ void menuGestionMesas(struct NodoEleccion *eleccionActual) {
                 esperarEnter();
         }
     } while (opcion != 0);
+}
+/* ----------------------------------------------------------------- */
+/* --- IMPLEMENTACION GESTION DE VOTANTES --- */
+/* ----------------------------------------------------------------- */
+
+/*  --- Funciones Internas de la Lista Doble --- */
+
+/* Funcion interna: Crea un nuevo NodoVotante y asigna memoria */
+struct NodoVotante* crearNodoVotante(char* rut, char* nombre, char* comuna) {
+    struct NodoVotante* nuevo;
+
+    /* 1. Pedir memoria */
+    nuevo = (struct NodoVotante*)malloc(sizeof(struct NodoVotante));
+    if (nuevo == NULL) {
+        printf("ERROR FATAL: No hay memoria para crear el votante.\n");
+        return NULL;
+    }
+
+    /* 2. Llenar los datos */
+    strcpy(nuevo->rut, rut);
+    strcpy(nuevo->nombre, nombre);
+    strcpy(nuevo->comuna, comuna);
+    strcpy(nuevo->region, "(Region por asignar)"); /* Valor por defecto */
+    nuevo->havotado = 0;
+
+    /* 3. Inicializar punteros */
+    nuevo->mesaasignada = NULL;
+    nuevo->sig = NULL;
+    nuevo->ant = NULL;
+
+    return nuevo;
+}
+
+/*  --- Funciones Publicas (Llamadas por el Menu) --- */
+
+/* Pide datos y agrega un nuevo votante al final de la lista doble */
+void agregarVotante(struct SistemaElectoral *sistema) {
+    char rutSocio[100];
+    char rutLimpio[11];
+    char nombre[100];
+    char comuna[50];
+    struct NodoVotante* nuevoNodo;
+    struct NodoVotante* votanteExistente;
+
+    limpiarPantalla();
+    printf("--- Agregar Votante al Registro Electoral ---\n");
+
+    /* 1. Pedir RUT y normalizarlo */
+    printf("Ingrese RUT (ej: 21.776.530-3): ");
+    fgets(rutSocio, sizeof(rutSocio), stdin);
+    rutSocio[strcspn(rutSocio, "\n")] = 0;
+    normalizarRUT(rutLimpio, rutSocio);
+
+    /* 2. Verificar duplicados */
+    votanteExistente = buscarVotante(sistema, rutLimpio);
+    if (votanteExistente != NULL) {
+        printf("\nError: El RUT %s ya existe en el registro.\n", rutLimpio);
+        esperarEnter();
+        return;
+    }
+
+    /* 3. Pedir resto de datos */
+    printf("RUT normalizado: %s\n", rutLimpio);
+    printf("Ingrese Nombre Completo: ");
+    fgets(nombre, sizeof(nombre), stdin);
+    nombre[strcspn(nombre, "\n")] = 0;
+
+    printf("Ingrese Comuna: ");
+    fgets(comuna, sizeof(comuna), stdin);
+    comuna[strcspn(comuna, "\n")] = 0;
+
+    /* 4. Crear el nodo */
+    nuevoNodo = crearNodoVotante(rutLimpio, nombre, comuna);
+    if (nuevoNodo == NULL) {
+        esperarEnter();
+        return;
+    }
+
+    /* 5. Insertar al final de la Lista Doblemente Enlazada */
+    nuevoNodo->ant = sistema->tailregistroelectoral;
+
+    if (sistema->headregistroelectoral == NULL) {
+        /* La lista esta vacia */
+        sistema->headregistroelectoral = nuevoNodo;
+        sistema->tailregistroelectoral = nuevoNodo;
+    } else {
+        /* Agregar al final */
+        sistema->tailregistroelectoral->sig = nuevoNodo;
+        sistema->tailregistroelectoral = nuevoNodo;
+    }
+
+    printf("\n¡Votante %s agregado al padron!\n", nombre);
+    esperarEnter();
+}
+
+/* Busca un votante por RUT en la Lista Doble */
+struct NodoVotante* buscarVotante(struct SistemaElectoral *sistema, char* rutBuscado) {
+    struct NodoVotante* actual;
+
+    actual = sistema->headregistroelectoral;
+
+    /* Recorrer la lista desde el inicio (head) */
+    while (actual != NULL) {
+        if (strcmp(actual->rut, rutBuscado) == 0) {
+            return actual;
+        }
+        actual = actual->sig;
+    }
+
+    return NULL;
+}
+
+/* Permite al usuario cambiar datos de un votante encontrado */
+int modificarVotante(struct SistemaElectoral *sistema, char* rutModificar) {
+    struct NodoVotante* votante;
+    int opcion;
+    char buffer[100];
+
+    /* 1. Buscar al votante */
+    votante = buscarVotante(sistema, rutModificar);
+    if (votante == NULL) {
+        printf("Error: Votante con RUT %s no encontrado.\n", rutModificar);
+        esperarEnter();
+        return 0;
+    }
+
+    /* 2. Mostrar menu de modificacion */
+    limpiarPantalla();
+    printf("--- Modificar Votante ---\n");
+    printf("Votante encontrado: %s (RUT: %s)\n", votante->nombre, votante->rut);
+    printf("\n¿Que desea modificar?\n");
+    printf(" 1. Nombre (Actual: %s)\n", votante->nombre);
+    printf(" 2. Comuna (Actual: %s)\n", votante->comuna);
+    printf(" 0. Cancelar\n");
+
+    opcion = ingresarOpcion();
+
+    switch (opcion) {
+        case 1:
+            printf("Ingrese nuevo Nombre: ");
+            fgets(buffer, sizeof(buffer), stdin);
+            buffer[strcspn(buffer, "\n")] = 0;
+            strcpy(votante->nombre, buffer);
+            printf("¡Nombre actualizado!\n");
+            break;
+        case 2:
+            printf("Ingrese nueva Comuna: ");
+            fgets(buffer, sizeof(buffer), stdin);
+            buffer[strcspn(buffer, "\n")] = 0;
+            strcpy(votante->comuna, buffer);
+            printf("¡Comuna actualizada!\n");
+            break;
+        case 0:
+            printf("Modificacion cancelada.\n");
+            break;
+        default:
+            printf("Opcion no valida.\n");
+            break;
+    }
+
+    esperarEnter();
+    return 1;
+}
+
+/* Elimina un votante de la Lista Doble */
+int eliminarVotante(struct SistemaElectoral *sistema, char* rutEliminar) {
+    struct NodoVotante* votante;
+
+    /* 1. Buscar al votante */
+    votante = buscarVotante(sistema, rutEliminar);
+    if (votante == NULL) {
+        printf("Error: Votante con RUT %s no encontrado.\n", rutEliminar);
+        esperarEnter();
+        return 0;
+    }
+
+    /* 2. Logica de re-enlace de Lista Doble */
+
+    /* Caso A: Es el NODO HEAD */
+    if (votante->ant == NULL) {
+        sistema->headregistroelectoral = votante->sig;
+        if (sistema->headregistroelectoral != NULL) {
+            /* Aun quedan nodos, actualizar el 'ant' del nuevo head */
+            sistema->headregistroelectoral->ant = NULL;
+        } else {
+            /* La lista quedo vacia, actualizar el 'tail' */
+            sistema->tailregistroelectoral = NULL;
+        }
+    }
+    /* Caso B: Es el NODO TAIL */
+    else if (votante->sig == NULL) {
+        sistema->tailregistroelectoral = votante->ant;
+        sistema->tailregistroelectoral->sig = NULL;
+    }
+    /* Caso C: Es un NODO INTERMEDIO */
+    else {
+        votante->ant->sig = votante->sig;
+        votante->sig->ant = votante->ant;
+    }
+
+    /* (El nodo 'votante' queda en memoria, pero desenlazado) */
+    printf("¡Votante %s (RUT: %s) eliminado del registro!\n", votante->nombre, votante->rut);
+    esperarEnter();
+    return 1; /* Exito */
+}
+
+/* Muestra todos los votantes en la Lista Doble */
+void listarVotantes(struct SistemaElectoral *sistema) {
+    struct NodoVotante* actual;
+    int i;
+
+    limpiarPantalla();
+    printf("--- Listado del Registro Electoral (Padron) ---\n");
+
+    actual = sistema->headregistroelectoral;
+
+    if (actual == NULL) {
+        printf(" (El registro electoral esta vacio)\n");
+    }
+
+    i = 1;
+    while (actual != NULL) {
+        printf(" %d. RUT: %-11s | Nombre: %-30s | Comuna: %s\n",
+               i, actual->rut, actual->nombre, actual->comuna);
+
+        /* Imprimir mesa asignada (si la tiene) */
+        if (actual->mesaasignada != NULL) {
+            printf("     -> Mesa Asignada: ID %d (%s)\n",
+                   actual->mesaasignada->idmesa,
+                   actual->mesaasignada->comuna);
+        } else {
+            printf("     -> (Mesa aun no asignada)\n");
+        }
+
+        actual = actual->sig;
+        i++;
+    }
+
+    esperarEnter();
+}
+
+/* Asigna un Votante (de la lista global) a una Mesa (del arbol de la eleccion) */
+int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    char rutSocio[100];
+    char rutLimpio[11];
+    int idMesa;
+    struct NodoVotante* votante;
+    struct NodoMesa* mesa; /* (Necesita 'buscarMesaRec') */
+
+    limpiarPantalla();
+    printf("--- Asignar Votante a Mesa de Votacion ---\n");
+
+    /* 1. Validar que existan mesas */
+    if (eleccionActual == NULL || eleccionActual->raizarbolmesas == NULL) {
+        printf("Error: No hay mesas creadas en la eleccion actual.\n");
+        printf("Primero debe agregar mesas en el Menu 3.\n");
+        esperarEnter();
+        return 0;
+    }
+
+    /* 2. Pedir y buscar al Votante */
+    printf("Ingrese RUT del votante a asignar: ");
+    fgets(rutSocio, sizeof(rutSocio), stdin);
+    rutSocio[strcspn(rutSocio, "\n")] = 0;
+    normalizarRUT(rutLimpio, rutSocio);
+
+    votante = buscarVotante(sistema, rutLimpio);
+    if (votante == NULL) {
+        printf("Error: Votante con RUT %s no encontrado.\n", rutLimpio);
+        esperarEnter();
+        return 0;
+    }
+
+    /* 3. Pedir y buscar la Mesa */
+    printf("Votante encontrado: %s\n", votante->nombre);
+    printf("Ingrese ID de la mesa a la que sera asignado: ");
+    idMesa = ingresarOpcion();
+
+
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+    if (mesa == NULL) {
+        printf("Error: Mesa con ID %d no encontrada en esta eleccion.\n", idMesa);
+        esperarEnter();
+        return 0;
+    }
+
+    /* 4. Realizar la asignacion (la conexion clave) */
+    votante->mesaasignada = mesa;
+
+    printf("\n¡Exito! Votante %s (RUT: %s) ha sido asignado a la:\n", votante->nombre, votante->rut);
+    printf("Mesa ID %d (Comuna: %s)\n", mesa->idmesa, mesa->comuna);
+    esperarEnter();
+    return 1;
+}
+
+/* Muestra el submenu para la gestion de votantes */
+void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    int opcion;
+    char rutSocio[100];
+    char rutLimpio[11];
+    struct NodoVotante* votanteEncontrado;
+
+    opcion = 0;
+
+    do {
+        limpiarPantalla();
+        printf("\n...:: Gestion de Registro Electoral (Votantes) ::...\n");
+        printf(" 1. Agregar Votante\n");
+        printf(" 2. Buscar Votante por RUT\n");
+        printf(" 3. Modificar Votante por RUT\n");
+        printf(" 4. Eliminar Votante por RUT\n");
+        printf(" 5. Listar Todos los Votantes\n");
+        printf(" 6. Asignar Votante a Mesa (Vuelta Actual)\n");
+        printf(" 0. Volver al Menu Principal\n");
+
+        opcion = ingresarOpcion();
+
+        switch (opcion) {
+            case 1:
+                agregarVotante(sistema);
+                break;
+            case 2:
+                printf("Ingrese RUT a buscar: ");
+                fgets(rutSocio, sizeof(rutSocio), stdin);
+                rutSocio[strcspn(rutSocio, "\n")] = 0;
+                normalizarRUT(rutLimpio, rutSocio);
+
+                votanteEncontrado = buscarVotante(sistema, rutLimpio);
+
+                limpiarPantalla();
+                printf("--- Resultado de la Busqueda ---\n");
+                if (votanteEncontrado != NULL) {
+                    printf("Votante encontrado:\n");
+                    printf("  RUT: %s\n", votanteEncontrado->rut);
+                    printf("  Nombre: %s\n", votanteEncontrado->nombre);
+                    printf("  Comuna: %s\n", votanteEncontrado->comuna);
+                } else {
+                    printf("Votante con RUT %s no encontrado.\n", rutLimpio);
+                }
+                esperarEnter();
+                break;
+            case 3:
+                printf("Ingrese RUT a modificar: ");
+                fgets(rutSocio, sizeof(rutSocio), stdin);
+                rutSocio[strcspn(rutSocio, "\n")] = 0;
+                normalizarRUT(rutLimpio, rutSocio);
+
+                modificarVotante(sistema, rutLimpio);
+                break;
+            case 4:
+                printf("Ingrese RUT a eliminar: ");
+                fgets(rutSocio, sizeof(rutSocio), stdin);
+                rutSocio[strcspn(rutSocio, "\n")] = 0;
+                normalizarRUT(rutLimpio, rutSocio);
+
+                eliminarVotante(sistema, rutLimpio);
+                break;
+            case 5:
+                listarVotantes(sistema);
+                break;
+            case 6:
+                /* Ahora 'eleccionActual' esta disponible gracias al parametro */
+                asignarMesaAVotante(sistema, eleccionActual);
+                break;
+            case 0:
+                printf("Volviendo al menu principal...\n");
+                break;
+            default:
+                printf("Opcion no valida.\n");
+                esperarEnter();
+        }
+    } while (opcion != 0);
+}
+/* ----------------------------------------------------------------- */
+/* --- IMPLEMENTACION GESTION DE CANDIDATURAS --- */
+/* ----------------------------------------------------------------- */
+
+/* --- Submenu de Candidatos --- */
+void menuGestionCandidatos(struct NodoEleccion *eleccionActual) {
+    int opcion;
+    int idCandidato;
+    struct Candidato *candEncontrado;
+
+    if (eleccionActual == NULL) {
+       printf("Error: No existe una eleccion activa.\n");
+       esperarEnter();
+       return;
+    }
+
+    opcion = 0;
+    do {
+       limpiarPantalla();
+       printf("\n...:: Gestion de Candidaturas (Vuelta %d) ::...\n", eleccionActual->numerovuelta);
+       printf(" Candidatos Registrados: %d/%d\n", eleccionActual->numcandidatos, MAXCANDIDATOS);
+       printf("------------------------------------------------\n");
+       printf(" 1. Agregar Candidato\n");
+       printf(" 2. Buscar Candidato por ID\n");
+       printf(" 3. Modificar Candidato (Nombre/Partido)\n");
+       printf(" 4. Eliminar Candidato\n");
+       printf(" 5. Listar Todos los Candidatos\n");
+       printf(" 0. Volver al Menu Principal\n");
+
+       opcion = ingresarOpcion();
+
+       switch (opcion) {
+           case 1:
+               agregarCandidato(eleccionActual);
+               break;
+           case 2:
+           {
+               printf("Ingrese ID del candidato a BUSCAR: ");
+               idCandidato = ingresarOpcion();
+
+               candEncontrado = buscarCandidato(eleccionActual, idCandidato);
+
+               limpiarPantalla();
+               if (candEncontrado != NULL) {
+                   printf("\n¡Candidato encontrado (ID: %d)!\n", candEncontrado->idcandidato);
+                   printf("  Nombre: %s\n", candEncontrado->nombre);
+                   printf("  Partido: %s\n", candEncontrado->partido);
+               } else {
+                   printf("\nError: Candidato con ID %d no encontrado.\n", idCandidato);
+               }
+
+               esperarEnter();
+               break;
+           }
+           case 3:
+               printf("Ingrese ID del candidato a MODIFICAR: ");
+               idCandidato = ingresarOpcion();
+               modificarCandidato(eleccionActual, idCandidato);
+               break;
+           case 4:
+               printf("Ingrese ID del candidato a ELIMINAR: ");
+               idCandidato = ingresarOpcion();
+               eliminarCandidato(eleccionActual, idCandidato);
+               break;
+           case 5:
+               listarCandidatos(eleccionActual);
+               break;
+           case 0:
+               printf("Volviendo al menu principal...\n");
+               break;
+           default:
+               printf("Opcion no valida.\n");
+               esperarEnter();
+       }
+    } while (opcion != 0);
+}
+
+/* Busca el primer slot libre en el pool o usa plibre si es el siguiente */
+void agregarCandidato(struct NodoEleccion *eleccionActual) {
+    int i;
+    int slotLibre;
+    char nombre[100];
+    char partido[50];
+    int idCandidatoTemp;
+
+    limpiarPantalla();
+    printf("--- Agregar Nuevo Candidato ---\n");
+
+    if (eleccionActual->numcandidatos >= MAXCANDIDATOS) {
+       printf("Error: Maximo de %d candidatos alcanzado.\n", MAXCANDIDATOS);
+       esperarEnter();
+       return;
+    }
+
+    /* 1. Buscar un slot libre (reuso de slots eliminados) */
+    slotLibre = -1;
+    for (i = 0; i < MAXCANDIDATOS; i++) {
+       /* Si el candidato esta libre (libre=1) y su ID es -1 (confirmacion extra) */
+       if (poolCandidatos[i].libre == 1 && poolCandidatos[i].idcandidato == -1) {
+           slotLibre = i;
+           break;
+       }
+    }
+
+    /* Si no encontro un slot libre (nunca se ha eliminado nada), usa el 'plibre' */
+    if (slotLibre == -1) {
+       slotLibre = plibre;
+    }
+
+    /* 2. Pedir datos del candidato */
+    printf("Ingrese ID numerico para el candidato: ");
+    /* El ID es arbitrario, no esta relacionado con la posicion en el array */
+    idCandidatoTemp = ingresarOpcion();
+
+    /* Validar que el ID no exista */
+    if (buscarCandidato(eleccionActual, idCandidatoTemp) != NULL) {
+       printf("\nError: Ya existe un candidato con ese ID. Cancelando operacion.\n");
+       esperarEnter();
+       return;
+    }
+
+    /* Si el ID es valido, se asigna */
+    poolCandidatos[slotLibre].idcandidato = idCandidatoTemp;
+
+    printf("Ingrese Nombre del Candidato: ");
+    fgets(nombre, sizeof(nombre), stdin);
+    nombre[strcspn(nombre, "\n")] = 0;
+    strcpy(poolCandidatos[slotLibre].nombre, nombre);
+
+    printf("Ingrese Partido Politico: ");
+    fgets(partido, sizeof(partido), stdin);
+    partido[strcspn(partido, "\n")] = 0;
+    strcpy(poolCandidatos[slotLibre].partido, partido);
+
+    /* 3. Marcar como ocupado y actualizar contadores */
+    poolCandidatos[slotLibre].libre = 0; /* Marcar como ocupado */
+    eleccionActual->numcandidatos++;
+
+    if (slotLibre == plibre) {
+       plibre++;
+    }
+
+    printf("\n¡Candidato %d (%s) agregado exitosamente en el slot %d!\n",
+          poolCandidatos[slotLibre].idcandidato, poolCandidatos[slotLibre].nombre, slotLibre);
+    esperarEnter();
+}
+
+/* Busca un candidato en el array por ID. Devuelve el puntero al struct Candidato o NULL. */
+struct Candidato* buscarCandidato(struct NodoEleccion *eleccionActual, int idBuscado) {
+    int i;
+
+    /* Recorrer todo el pool estatico */
+    for (i = 0; i < MAXCANDIDATOS; i++) {
+       /* Solo revisar los que no esten marcados como libre */
+       if (poolCandidatos[i].libre == 0 && poolCandidatos[i].idcandidato == idBuscado) {
+           return &poolCandidatos[i];
+       }
+    }
+
+    return NULL;
+}
+
+/* Busca un candidato y permite modificar su nombre y/o partido */
+int modificarCandidato(struct NodoEleccion *eleccionActual, int idModificar) {
+    struct Candidato *candidato;
+    int opcion;
+    char buffer[100];
+
+    limpiarPantalla();
+    printf("--- Modificar Candidato ID: %d ---\n", idModificar);
+
+    candidato = buscarCandidato(eleccionActual, idModificar);
+
+    if (candidato == NULL) {
+       printf("\nError: Candidato con ID %d no encontrado.\n", idModificar);
+       esperarEnter();
+       return 0;
+    }
+
+    /* Si se encontro, mostrar la info */
+    printf("\n¡Candidato encontrado (ID: %d)!\n", candidato->idcandidato);
+    printf("  Nombre: %s\n", candidato->nombre);
+    printf("  Partido: %s\n", candidato->partido);
+    esperarEnter();
+    limpiarPantalla();
+
+    printf("Candidato encontrado. Datos actuales:\n");
+    printf(" ID: %d\n", candidato->idcandidato);
+    printf(" 1. Nombre: %s\n", candidato->nombre);
+    printf(" 2. Partido: %s\n", candidato->partido);
+    printf(" 0. Cancelar\n");
+    printf("\n¿Que desea modificar?\n");
+
+    opcion = ingresarOpcion();
+
+    switch (opcion) {
+       case 1:
+           printf("Ingrese nuevo Nombre: ");
+           fgets(buffer, sizeof(buffer), stdin);
+           buffer[strcspn(buffer, "\n")] = 0;
+           strcpy(candidato->nombre, buffer);
+           printf("¡Nombre actualizado!\n");
+           break;
+       case 2:
+           printf("Ingrese nuevo Partido: ");
+           fgets(buffer, sizeof(buffer), stdin);
+           buffer[strcspn(buffer, "\n")] = 0;
+           strcpy(candidato->partido, buffer);
+           printf("¡Partido actualizado!\n");
+           break;
+       case 0:
+           printf("Modificacion cancelada.\n");
+           break;
+       default:
+           printf("Opcion no valida.\n");
+           break;
+    }
+
+    esperarEnter();
+    return 1;
+}
+
+/* Elimina (marca como libre) un candidato del array */
+int eliminarCandidato(struct NodoEleccion *eleccionActual, int idEliminar) {
+    int i;
+
+    limpiarPantalla();
+    printf("--- Eliminar Candidato ID: %d ---\n", idEliminar);
+
+    /* 1. Buscar el slot que contiene al candidato */
+    for (i = 0; i < MAXCANDIDATOS; i++) {
+       if (poolCandidatos[i].libre == 0 && poolCandidatos[i].idcandidato == idEliminar) {
+
+           /* 2. Marcar el slot como libre (Eliminar) */
+           poolCandidatos[i].libre = 1;
+           poolCandidatos[i].idcandidato = -1; /* ID invalido para seguridad */
+
+           /* 3. Actualizar contadores */
+           eleccionActual->numcandidatos--;
+
+           printf("¡Candidato con ID %d eliminado (slot %d liberado)!\n", idEliminar, i);
+           esperarEnter();
+           return 1;
+       }
+    }
+
+    printf("Error: Candidato con ID %d no encontrado. No se puede eliminar.\n", idEliminar);
+    esperarEnter();
+    return 0;
+}
+
+/* Muestra un listado de todos los candidatos activos */
+void listarCandidatos(struct NodoEleccion *eleccionActual) {
+    int i;
+
+    limpiarPantalla();
+    printf("--- Listado de Candidatos Activos (Vuelta %d) ---\n", eleccionActual->numerovuelta);
+    printf(" Total: %d/%d\n", eleccionActual->numcandidatos, MAXCANDIDATOS);
+    printf("--------------------------------------------------\n");
+
+    if (eleccionActual->numcandidatos == 0) {
+       printf(" (No hay candidatos registrados)\n");
+       esperarEnter();
+       return;
+    }
+
+    for (i = 0; i < MAXCANDIDATOS; i++) {
+       /* Solo mostrar los que no esten marcados como libre */
+       if (poolCandidatos[i].libre == 0) {
+           printf("  -> ID: %-5d | Nombre: %-30s | Partido: %s\n",
+                  poolCandidatos[i].idcandidato,
+                  poolCandidatos[i].nombre,
+                  poolCandidatos[i].partido);
+       }
+    }
+
+    esperarEnter();
 }
