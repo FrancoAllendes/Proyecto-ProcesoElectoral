@@ -52,6 +52,7 @@ struct Candidato {
     int idcandidato;
     char nombre[100];
     char partido[50];
+    int libre;
 };
 
 struct NodoVoto {
@@ -66,6 +67,15 @@ struct NodoVoto {
 
 struct Candidato poolCandidatos[MAXCANDIDATOS];
 int plibre = 0;
+
+void inicializarPoolCandidatos() {
+    int i;
+    plibre = 0;
+    for (i = 0; i < MAXCANDIDATOS; i++) {
+        poolCandidatos[i].libre = 1;
+        poolCandidatos[i].idcandidato = -1;
+    }
+}
 
 /* ----------------------------------------------------------------- */
 /* --- PROTOTIPOS DE FUNCIONES --- */
@@ -124,6 +134,7 @@ int main() {
     sistema.tailregistroelectoral = NULL; /* Puntero 'tail' de la Lista Doble de Votantes */
 
     /* 2. Logica para crear e inicializar la Primera Vuelta */
+    inicializarPoolCandidatos();
     /* (Creamos la primera vuelta y la enganchamos al sistema) */
     struct NodoEleccion *primeraVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
     primeraVuelta->numerovuelta = 1;
@@ -1140,7 +1151,6 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
 struct Candidato* buscarCandidato(struct NodoEleccion *eleccionActual, int idBuscado) {
     int i;
 
-    /* Recorrer todo el pool estatico */
     for (i = 0; i < MAXCANDIDATOS; i++) {
        /* Solo revisar los que no esten marcados como libre */
        if (poolCandidatos[i].libre == 0 && poolCandidatos[i].idcandidato == idBuscado) {
