@@ -1457,94 +1457,6 @@ struct NodoVoto* buscarVoto(struct NodoEleccion *eleccionActual, int idMesa, cha
 /* --- IMPLEMENTACION DE FUNCIONES PRINCIPALES --- */
 /* ----------------------------------------------------------------- */
 
-void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
-    int opcion;
-    int idMesaOperacion;
-    char rutOperacion[100];
-    struct NodoVoto *votoEncontrado;
-
-    /* 1. Validaciones previas */
-    if (eleccionActual == NULL) {
-        printf("Error: No existe una eleccion activa.\n");
-        esperarEnter();
-        return;
-    }
-
-    opcion = 0;
-    do {
-        limpiarPantalla();
-        printf("\n...:: Proceso de Votacion (Vuelta %d) ::...\n", eleccionActual->numerovuelta);
-        printf("------------------------------------------------\n");
-        printf(" 1. Registrar un Voto (Simulacion)\n");
-        printf(" 2. Listar Votos de una Mesa\n"); 
-        printf(" 3. Buscar Voto por RUT y Mesa\n"); 
-        printf(" 4. Eliminar Voto (Anulación) por RUT\n"); 
-        printf(" 5. Modificar Voto (Cambiar Candidato)\n");
-        printf(" 0. Volver al Menu Principal\n");
-        printf("------------------------------------------------\n");
-
-        opcion = ingresarOpcion();
-
-        switch (opcion) {
-            case 1:
-                registrarVoto(sistema, eleccionActual);
-                break;
-            case 2:
-                /* listarVotos(eleccionActual); -- (Implementacion pendiente) */
-                printf("\nFuncion 'Listar Votos' pendiente de implementacion.\n");
-                esperarEnter();
-                break;
-            case 3:
-                /* Logica de busqueda de voto... */
-                printf("Ingrese ID de la mesa a buscar: ");
-                idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante cuyo voto desea buscar: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
-                
-                votoEncontrado = buscarVoto(eleccionActual, idMesaOperacion, rutOperacion);
-
-                limpiarPantalla();
-                printf("--- Resultado de la Busqueda ---\n");
-                if (votoEncontrado != NULL) {
-                    printf("¡Voto encontrado en Mesa ID %d!\n", idMesaOperacion);
-                    printf("  RUT del Votante: %s\n", votoEncontrado->rutvotante);
-                    printf("  ID del Candidato Votado: %d\n", votoEncontrado->idcandidatovotado);
-                } else {
-                    printf("Voto del RUT %s no encontrado en Mesa ID %d.\n", rutOperacion, idMesaOperacion);
-                }
-                esperarEnter();
-                break;
-            case 4:
-                /* Logica de eliminacion de voto... */
-                printf("Ingrese ID de la mesa donde se emitio el voto: ");
-                idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante para anular el voto: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
-                
-                eliminarVoto(sistema, eleccionActual, idMesaOperacion, rutOperacion);
-                break;
-            case 5:
-                /* Logica de modificacion de voto... */
-                printf("Ingrese ID de la mesa del voto a corregir: ");
-                idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante cuyo voto desea modificar: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
-                
-                modificarVoto(eleccionActual, idMesaOperacion, rutOperacion);
-                break;
-            case 0:
-                printf("Volviendo al menu principal...\n");
-                break;
-            default:
-                printf("Opcion no valida.\n");
-                esperarEnter();
-        }
-    } while (opcion != 0);
-}
-
 /* --- REGISTRO DEL VOTO --- */
 void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
     char rutSocio[100];
@@ -1768,4 +1680,123 @@ int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModi
 
     esperarEnter();
     return 1;
+}
+
+/* Muestra la lista de votos de una mesa especifica */
+void listarVotos(struct NodoEleccion *eleccionActual) {
+    int idMesa;
+    struct NodoMesa *mesa;
+    struct NodoVoto *actual;
+    int i = 1;
+
+    limpiarPantalla();
+    printf("--- Listado de Votos ---\n");
+    printf("Ingrese ID de la mesa: ");
+    idMesa = ingresarOpcion();
+
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+    
+    if (mesa == NULL || mesa->headlistavotos == NULL) {
+        printf("Mesa no encontrada o sin votos.\n");
+        esperarEnter();
+        return;
+    }
+
+    printf("\n[Votos en Mesa %d]\n", mesa->idmesa);
+    
+    /* La lista es circular. Empezamos en head->sig (el primero real) */
+    actual = mesa->headlistavotos->sig; 
+    do {
+        printf(" %d. RUT: %-11s | Candidato ID: %d\n", i++, actual->rutvotante, actual->idcandidatovotado);
+        actual = actual->sig;
+    } while (actual != mesa->headlistavotos->sig); /* Hasta volver al principio */
+
+    esperarEnter();
+}
+
+void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    int opcion;
+    int idMesaOperacion;
+    char rutOperacion[100];
+    struct NodoVoto *votoEncontrado;
+
+    /* 1. Validaciones previas */
+    if (eleccionActual == NULL) {
+        printf("Error: No existe una eleccion activa.\n");
+        esperarEnter();
+        return;
+    }
+
+    opcion = 0;
+    do {
+        limpiarPantalla();
+        printf("\n...:: Proceso de Votacion (Vuelta %d) ::...\n", eleccionActual->numerovuelta);
+        printf("------------------------------------------------\n");
+        printf(" 1. Registrar un Voto (Simulacion)\n");
+        printf(" 2. Listar Votos de una Mesa\n"); 
+        printf(" 3. Buscar Voto por RUT y Mesa\n"); 
+        printf(" 4. Eliminar Voto (Anulación) por RUT\n"); 
+        printf(" 5. Modificar Voto (Cambiar Candidato)\n");
+        printf(" 0. Volver al Menu Principal\n");
+        printf("------------------------------------------------\n");
+
+        opcion = ingresarOpcion();
+
+        switch (opcion) {
+            case 1:
+                registrarVoto(sistema, eleccionActual);
+                break;
+            case 2:
+                listarVotos(eleccionActual);
+                esperarEnter();
+                break;
+            case 3:
+                /* Logica de busqueda de voto... */
+                printf("Ingrese ID de la mesa a buscar: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante cuyo voto desea buscar: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                votoEncontrado = buscarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+
+                limpiarPantalla();
+                printf("--- Resultado de la Busqueda ---\n");
+                if (votoEncontrado != NULL) {
+                    printf("¡Voto encontrado en Mesa ID %d!\n", idMesaOperacion);
+                    printf("  RUT del Votante: %s\n", votoEncontrado->rutvotante);
+                    printf("  ID del Candidato Votado: %d\n", votoEncontrado->idcandidatovotado);
+                } else {
+                    printf("Voto del RUT %s no encontrado en Mesa ID %d.\n", rutOperacion, idMesaOperacion);
+                }
+                esperarEnter();
+                break;
+            case 4:
+                /* Logica de eliminacion de voto... */
+                printf("Ingrese ID de la mesa donde se emitio el voto: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante para anular el voto: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                eliminarVoto(sistema, eleccionActual, idMesaOperacion, rutOperacion);
+                break;
+            case 5:
+                /* Logica de modificacion de voto... */
+                printf("Ingrese ID de la mesa del voto a corregir: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante cuyo voto desea modificar: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                modificarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+                break;
+            case 0:
+                printf("Volviendo al menu principal...\n");
+                break;
+            default:
+                printf("Opcion no valida.\n");
+                esperarEnter();
+        }
+    } while (opcion != 0);
 }
