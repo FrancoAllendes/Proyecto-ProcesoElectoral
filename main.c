@@ -1427,6 +1427,32 @@ void insertarVoto(struct NodoMesa *mesa, struct NodoVoto *nuevoVoto) {
     }
 }
 
+/* Busca un voto en la lista circular de una mesa */
+struct NodoVoto* buscarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutBuscado) {
+    struct NodoMesa *mesa;
+    struct NodoVoto *actual;
+    char rutLimpio[11];
+    
+    normalizarRUT(rutLimpio, rutBuscado);
+
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+    
+    if (mesa == NULL || mesa->headlistavotos == NULL) {
+        return NULL;
+    }
+
+    actual = mesa->headlistavotos->sig; /* Empezar desde el HEAD (tail->sig) */
+    
+    do {
+        if (strcmp(actual->rutvotante, rutLimpio) == 0) {
+            return actual;
+        }
+        actual = actual->sig;
+    } while (actual != mesa->headlistavotos->sig);
+
+    return NULL;
+}
+
 /* ----------------------------------------------------------------- */
 /* --- IMPLEMENTACION DE FUNCIONES PRINCIPALES --- */
 /* ----------------------------------------------------------------- */
@@ -1687,4 +1713,59 @@ int eliminarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccion
     printf("\n Voto de RUT %s no encontrado en Mesa %d.\n", rutLimpio, idMesa);
     esperarEnter();
     return 0;
+}
+/* --- MODIFICAR VOTO --- */
+int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModificar) {
+    struct NodoVoto *voto;
+    struct NodoMesa *mesa;
+    int nuevoId, antiguoId, idxAntiguo, idxNuevo;
+    
+    limpiarPantalla();
+    printf("--- MODIFICAR VOTO REGISTRADO ---\n");
+
+    voto = buscarVoto(eleccionActual, idMesa, rutModificar);
+    if (voto == NULL) {
+        printf("Voto no encontrado.\n");
+        esperarEnter();
+        return 0;
+    }
+    
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+    
+    printf("Voto actual por candidato ID: %d\n", voto->idcandidatovotado);
+    printf("Ingrese NUEVO ID de Candidato (0 para nulo): ");
+    nuevoId = ingresarOpcion();
+
+    /* Validar nuevo ID */
+    idxNuevo = -1;
+    if (nuevoId != 0) {
+        idxNuevo = obtenerIndiceLocal(eleccionActual, nuevoId);
+        if (idxNuevo == -1) {
+            printf("ID invalido.\n");
+            esperarEnter();
+            return 0;
+        }
+    }
+
+    /* Revertir conteo antiguo */
+    antiguoId = voto->idcandidatovotado;
+    if (antiguoId != 0) {
+        idxAntiguo = obtenerIndiceLocal(eleccionActual, antiguoId);
+        if (idxAntiguo != -1) mesa->conteovotos[idxAntiguo]--;
+    } else {
+        mesa->votos_nulos--;
+    }
+
+    /* Aplicar nuevo conteo */
+    voto->idcandidatovotado = nuevoId;
+    if (nuevoId != 0) {
+        mesa->conteovotos[idxNuevo]++;
+        printf("Voto modificado a ID %d.\n", nuevoId);
+    } else {
+        mesa->votos_nulos++;
+        printf("Voto modificado a NULO.\n");
+    }
+
+    esperarEnter();
+    return 1;
 }
