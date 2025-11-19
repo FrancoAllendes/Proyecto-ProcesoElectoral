@@ -29,6 +29,8 @@ struct NodoEleccion {
 struct NodoVotante {
     char rut[11];
     char nombre[100];
+    char pais[50];
+    char nacionalidad[50];
     char comuna[50];
     char region[50];
     int havotado;
@@ -43,6 +45,8 @@ struct NodoMesa {
     char region[50];
     int votosemitidos;
     long *conteovotos;
+    long votos_nulos;
+    long votos_blancos;
     struct NodoVoto *headlistavotos;
     struct NodoMesa *izq;
     struct NodoMesa *der;
@@ -635,7 +639,7 @@ void menuGestionMesas(struct NodoEleccion *eleccionActual) {
 /*  --- Funciones Internas de la Lista Doble --- */
 
 /* Funcion interna: Crea un nuevo NodoVotante y asigna memoria */
-struct NodoVotante* crearNodoVotante(char* rut, char* nombre, char* comuna) {
+struct NodoVotante* crearNodoVotante(char* rut, char* nombre,char* nacionalidad,char *pais,char *region, char* comuna) {
     struct NodoVotante* nuevo;
 
     /* 1. Pedir memoria */
@@ -648,8 +652,10 @@ struct NodoVotante* crearNodoVotante(char* rut, char* nombre, char* comuna) {
     /* 2. Llenar los datos */
     strcpy(nuevo->rut, rut);
     strcpy(nuevo->nombre, nombre);
+    strcpy(nuevo->nacionalidad, nacionalidad);
+    strcpy(nuevo->pais, pais);
+    strcpy(nuevo->region, region);
     strcpy(nuevo->comuna, comuna);
-    strcpy(nuevo->region, "(Region por asignar)"); /* Valor por defecto */
     nuevo->havotado = 0;
 
     /* 3. Inicializar punteros */
@@ -667,20 +673,36 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     char rutSocio[100];
     char rutLimpio[11];
     char nombre[100];
+    char nacionalidad[50]; 
+    char pais[50];
     char comuna[50];
+    char region[50];
     struct NodoVotante* nuevoNodo;
     struct NodoVotante* votanteExistente;
+    int esChileno;
 
     limpiarPantalla();
     printf("--- Agregar Votante al Registro Electoral ---\n");
 
-    /* 1. Pedir RUT y normalizarlo */
+    /* 1. Validacion de Nacionalidad  */
+    printf("¿El votante posee nacionalidad Chilena? (1: Si / 0: No): ");
+    esChileno = ingresarOpcion();
+
+    if (esChileno != 1) {
+        printf("Error: Segun la normativa, debe cumplir requisitos de nacionalidad chilena.\n");
+        printf("Registro cancelado.\n");
+        esperarEnter();
+        return;
+    }
+    strcpy(nacionalidad, "Chilena");
+
+    /* 2. Pedir RUT y normalizarlo */
     printf("Ingrese RUT (ej: 21.776.530-3): ");
     fgets(rutSocio, sizeof(rutSocio), stdin);
     rutSocio[strcspn(rutSocio, "\n")] = 0;
     normalizarRUT(rutLimpio, rutSocio);
 
-    /* 2. Verificar duplicados */
+    /* Verificar duplicados */
     votanteExistente = buscarVotante(sistema, rutLimpio);
     if (votanteExistente != NULL) {
         printf("\nError: El RUT %s ya existe en el registro.\n", rutLimpio);
@@ -688,24 +710,53 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         return;
     }
 
-    /* 3. Pedir resto de datos */
-    printf("RUT normalizado: %s\n", rutLimpio);
-    printf("Ingrese Nombre Completo: ");
-    fgets(nombre, sizeof(nombre), stdin);
-    nombre[strcspn(nombre, "\n")] = 0;
-
+    /* 3. Pedir datos Personales */
+    /*printf("RUT normalizado: %s\n", rutLimpio); 
+    
     printf("Ingrese Comuna: ");
     fgets(comuna, sizeof(comuna), stdin);
     comuna[strcspn(comuna, "\n")] = 0;
 
-    /* 4. Crear el nodo */
-    nuevoNodo = crearNodoVotante(rutLimpio, nombre, comuna);
-    if (nuevoNodo == NULL) {
-        esperarEnter();
-        return;
+    */
+    
+    printf("Ingrese Nombre Completo: ");
+    fgets(nombre, sizeof(nombre), stdin);
+    nombre[strcspn(nombre, "\n")] = 0;
+
+    /* 4. Gestion de Residencia (Chile vs Extranjero)  */
+    printf("Ingrese Pais de Residencia (Escriba 'Chile' si reside en el pais): ");
+    fgets(pais, sizeof(pais), stdin);
+    pais[strcspn(pais, "\n")] = 0;
+    
+    if (strcmp(pais, "Chile") == 0 || strcmp(pais, "chile") == 0) {
+        printf("Ingrese Region: ");
+        fgets(region, sizeof(region), stdin);
+        region[strcspn(region, "\n")] = 0;
+        
+        printf("Ingrese Comuna: ");
+        fgets(comuna, sizeof(comuna), stdin);
+        comuna[strcspn(comuna, "\n")] = 0;
+    } else {
+        /* Si es extranjero, usamos region/comuna para ciudad/estado */
+        printf("Votante en el Extranjero detectado.\n");
+        printf("Ingrese Ciudad de Residencia (se guardara como Comuna): ");
+        fgets(comuna, sizeof(comuna), stdin);
+        comuna[strcspn(comuna, "\n")] = 0;
+        
+        printf("Ingrese Estado/Provincia (se guardara como Region): ");
+        fgets(region, sizeof(region), stdin);
+        region[strcspn(region, "\n")] = 0;
     }
 
-    /* 5. Insertar al final de la Lista Doblemente Enlazada */
+    /* 5. Crear el nodo */
+    nuevoNodo = crearNodoVotante(rutLimpio, nombre, nacionalidad, pais, region, comuna);
+    if (nuevoNodo == NULL) return;
+    
+    strcpy(nuevoNodo->pais, pais);
+    strcpy(nuevoNodo->nacionalidad, nacionalidad);
+    strcpy(nuevoNodo->region, region); 
+
+    /* 6. Insertar al final de la Lista Doblemente Enlazada */
     nuevoNodo->ant = sistema->tailregistroelectoral;
 
     if (sistema->headregistroelectoral == NULL) {
@@ -718,7 +769,10 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         sistema->tailregistroelectoral = nuevoNodo;
     }
 
-    printf("\n¡Votante %s agregado al padron!\n", nombre);
+    printf("\n¡Votante agregado exitosamente!\n");
+    if (strcmp(pais, "Chile") != 0) {
+        printf("(Registrado como votante en el extranjero: %s)\n", pais);
+    }
     esperarEnter();
 }
 
