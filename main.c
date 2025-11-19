@@ -29,6 +29,7 @@ struct NodoEleccion {
 struct NodoVotante {
     char rut[11];
     char nombre[100];
+    int edad;
     char pais[50];
     char nacionalidad[50];
     char comuna[50];
@@ -56,6 +57,8 @@ struct Candidato {
     int idcandidato;
     char nombre[100];
     char partido[50];
+    int edad;
+    int firmasapoyo;
     int libre;
 };
 
@@ -305,6 +308,8 @@ struct NodoMesa* crearNodoMesa(int id, char* com, char* reg, int numCands) {
     strcpy(nuevo->comuna, com);
     strcpy(nuevo->region, reg);
     nuevo->votosemitidos = 0;
+    nuevo->votos_nulos = 0;
+    nuevo->votos_blancos = 0;
     nuevo->headlistavotos = NULL;
     nuevo->izq = NULL;
     nuevo->der = NULL;
@@ -408,6 +413,8 @@ struct NodoMesa* eliminarMesaRec(struct NodoMesa* raiz, int idEliminar) {
         strcpy(raiz->comuna, sucesor->comuna);
         strcpy(raiz->region, sucesor->region);
         raiz->votosemitidos = sucesor->votosemitidos;
+        raiz->votos_nulos = sucesor->votos_nulos;
+        raiz->votos_blancos = sucesor->votos_blancos;
         raiz->conteovotos = sucesor->conteovotos;
         raiz->headlistavotos = sucesor->headlistavotos;
 
@@ -677,14 +684,15 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     char pais[50];
     char comuna[50];
     char region[50];
+    int votanteEdad;
+    int esChileno;
     struct NodoVotante* nuevoNodo;
     struct NodoVotante* votanteExistente;
-    int esChileno;
 
     limpiarPantalla();
     printf("--- Agregar Votante al Registro Electoral ---\n");
 
-    /* 1. Validacion de Nacionalidad  */
+    /* 1. Validacion de Nacionalidad y Edad  */
     printf("¿El votante posee nacionalidad Chilena? (1: Si / 0: No): ");
     esChileno = ingresarOpcion();
 
@@ -695,6 +703,15 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         return;
     }
     strcpy(nacionalidad, "Chilena");
+    strcpy(nacionalidad, "Chilena");
+
+    printf("Ingrese EDAD del votante: ");
+    votanteEdad = ingresarOpcion();
+    if (votanteEdad < 18) {
+        printf("Error: El votante debe tener 18 años o mas para participar.\n");
+        esperarEnter();
+        return; 
+    }
 
     /* 2. Pedir RUT y normalizarlo */
     printf("Ingrese RUT (ej: 21.776.530-3): ");
@@ -702,23 +719,15 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     rutSocio[strcspn(rutSocio, "\n")] = 0;
     normalizarRUT(rutLimpio, rutSocio);
 
-    /* Verificar duplicados */
+    /* 3. Verificar duplicados */
     votanteExistente = buscarVotante(sistema, rutLimpio);
     if (votanteExistente != NULL) {
         printf("\nError: El RUT %s ya existe en el registro.\n", rutLimpio);
         esperarEnter();
         return;
     }
-
-    /* 3. Pedir datos Personales */
-    /*printf("RUT normalizado: %s\n", rutLimpio); 
     
-    printf("Ingrese Comuna: ");
-    fgets(comuna, sizeof(comuna), stdin);
-    comuna[strcspn(comuna, "\n")] = 0;
-
-    */
-    
+    /* 4. Pedir Datos Personales y Residencia */
     printf("Ingrese Nombre Completo: ");
     fgets(nombre, sizeof(nombre), stdin);
     nombre[strcspn(nombre, "\n")] = 0;
@@ -752,10 +761,9 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     nuevoNodo = crearNodoVotante(rutLimpio, nombre, nacionalidad, pais, region, comuna);
     if (nuevoNodo == NULL) return;
     
-    strcpy(nuevoNodo->pais, pais);
-    strcpy(nuevoNodo->nacionalidad, nacionalidad);
-    strcpy(nuevoNodo->region, region); 
-
+    nuevoNodo->edad = votanteEdad;
+    nuevoNodo->havotado = 0;
+    
     /* 6. Insertar al final de la Lista Doblemente Enlazada */
     nuevoNodo->ant = sistema->tailregistroelectoral;
 
@@ -1138,6 +1146,8 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
     char nombre[100];
     char partido[50];
     int idCandidatoTemp;
+    int candidatoEdad;
+    int firmas;
 
     limpiarPantalla();
     printf("--- Agregar Nuevo Candidato ---\n");
@@ -1148,7 +1158,18 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        return;
     }
 
-    /* 1. Buscar un slot libre (reuso de slots eliminados) */
+    /* 1. Validacion de Edad */
+    printf("Ingrese EDAD del candidato: ");
+    candidatoEdad = ingresarOpcion();
+    if (candidatoEdad < 35) {
+        printf("Error: El candidato presidencial debe tener 35 años o mas.\n");
+        esperarEnter();
+        return;
+    }
+
+    /* 2. Validacion de ID y slot libre (PLibre) */
+
+    /* Buscar un slot libre (reuso de slots eliminados) */
     slotLibre = -1;
     for (i = 0; i < MAXCANDIDATOS; i++) {
        /* Si el candidato esta libre (libre=1) y su ID es -1 (confirmacion extra) */
@@ -1163,7 +1184,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        slotLibre = plibre;
     }
 
-    /* 2. Pedir datos del candidato */
+    /* 3. Pedir datos del candidato */
     printf("Ingrese ID numerico para el candidato: ");
     /* El ID es arbitrario, no esta relacionado con la posicion en el array */
     idCandidatoTemp = ingresarOpcion();
@@ -1175,8 +1196,17 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        return;
     }
 
-    /* Si el ID es valido, se asigna */
+    /* 4. Pedir Firmas de Apoyo (si es independiente) */
+    printf("Ingrese Firmas de Apoyo (0 si postula por partido): ");
+    firmas = ingresarOpcion();
+    if (firmas == 0) {
+        printf("ADVERTENCIA: Candidato independiente debe tener firmas (asumiendo que este es de partido).\n");
+    }
+
+    /* 5. Asignar datos al pool */
     poolCandidatos[slotLibre].idcandidato = idCandidatoTemp;
+    poolCandidatos[slotLibre].edad = candidatoEdad; 
+    poolCandidatos[slotLibre].firmasapoyo = firmas;
 
     printf("Ingrese Nombre del Candidato: ");
     fgets(nombre, sizeof(nombre), stdin);
@@ -1188,7 +1218,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
     partido[strcspn(partido, "\n")] = 0;
     strcpy(poolCandidatos[slotLibre].partido, partido);
 
-    /* 3. Marcar como ocupado y actualizar contadores */
+    /* 6. Marcar como ocupado y actualizar contadores */
     poolCandidatos[slotLibre].libre = 0; /* Marcar como ocupado */
     eleccionActual->numcandidatos++;
 
