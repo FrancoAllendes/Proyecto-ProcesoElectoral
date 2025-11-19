@@ -431,7 +431,6 @@ void agregarMesa(struct NodoEleccion *eleccionActual) {
     int idMesa;
     char comuna[50];
     char region[50];
-    char buffer[100];
     struct NodoMesa* nuevoNodo;
     
     limpiarPantalla();
@@ -1190,7 +1189,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
     idCandidatoTemp = ingresarOpcion();
 
     /* Validar que el ID no exista */
-    if (buscarCandidato(eleccionActual, idCandidatoTemp) != NULL) {
+    if (buscarCandidato(eleccionActual,idCandidatoTemp) != NULL) {
        printf("\nError: Ya existe un candidato con ese ID. Cancelando operacion.\n");
        esperarEnter();
        return;
@@ -1232,9 +1231,11 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
 }
 
 /* Busca un candidato en el array por ID. Devuelve el puntero al struct Candidato o NULL. */
-struct Candidato* buscarCandidato(struct NodoEleccion *eleccionActual, int idBuscado) {
+struct Candidato* buscarCandidato(struct NodoEleccion *eleccionActual,int idBuscado) {
     int i;
-
+    
+    printf("   (Buscando en los registros de la Vuelta %d...)\n", eleccionActual->numerovuelta);
+    
     for (i = 0; i < MAXCANDIDATOS; i++) {
        /* Solo revisar los que no esten marcados como libre */
        if (poolCandidatos[i].libre == 0 && poolCandidatos[i].idcandidato == idBuscado) {
@@ -1254,7 +1255,7 @@ int modificarCandidato(struct NodoEleccion *eleccionActual, int idModificar) {
     limpiarPantalla();
     printf("--- Modificar Candidato ID: %d ---\n", idModificar);
 
-    candidato = buscarCandidato(eleccionActual, idModificar);
+    candidato = buscarCandidato(eleccionActual,idModificar);
 
     if (candidato == NULL) {
        printf("\nError: Candidato con ID %d no encontrado.\n", idModificar);
