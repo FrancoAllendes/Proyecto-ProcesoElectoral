@@ -1361,3 +1361,330 @@ void listarCandidatos(struct NodoEleccion *eleccionActual) {
 
     esperarEnter();
 }
+
+/* ----------------------------------------------------------------- */
+/* --- VOTACION Y ESCRUTINIO --- */
+/* ----------------------------------------------------------------- */
+
+/* --- Funciones Auxiliares  --- */
+
+/*Funcion 1*/
+/* Mapea el ID de un candidato al indice localdel arreglo conteovotos */
+int obtenerIndiceLocal(struct NodoEleccion *eleccionActual, int idCandidato) {
+    int i;
+    
+    /* Iteramos sobre los candidatos activos de ESTA elección */
+    for (i = 0; i < eleccionActual->numcandidatos; i++) {
+         /* Usamos el puntero base para encontrar el slot */
+         if (eleccionActual->arraycandidatos[i].idcandidato == idCandidato) {
+             return i; 
+         }
+    }
+    return -1; 
+}
+
+/*Funcion 2*/
+/* Crea un nuevo NodoVoto y asigna memoria */
+struct NodoVoto* crearNodoVoto(char* rut, int idcandidato) {
+    struct NodoVoto *nuevo;
+
+    nuevo = (struct NodoVoto*)malloc(sizeof(struct NodoVoto));
+    if (nuevo == NULL) {
+        printf("ERROR: No hay memoria para crear el nodo de voto.\n");
+        return NULL;
+    }
+
+    /* 1. Llenar los datos */
+    strcpy(nuevo->rutvotante, rut);
+    nuevo->idcandidatovotado = idcandidato;
+
+    /* 2. Inicializar puntero (se enlaza en 'insertarVoto') */
+    nuevo->sig = NULL; 
+
+    return nuevo;
+}
+
+/* Funcion 3 */
+/* Inserta el nuevo voto en la Lista Circular de la Mesa */
+void insertarVoto(struct NodoMesa *mesa, struct NodoVoto *nuevoVoto) {
+    struct NodoVoto **pTail;
+
+    pTail = &(mesa->headlistavotos); /* 'pTail' apunta al puntero que contiene el TAIL */
+
+    if (*pTail == NULL) {
+        /* La lista está vacía: el nuevo nodo se apunta a sí mismo. */
+        nuevoVoto->sig = nuevoVoto; 
+        *pTail = nuevoVoto;
+    } else {
+        /* 1. El nuevo voto apunta al primer elemento (que es (*pTail)->sig) */
+        nuevoVoto->sig = (*pTail)->sig;
+        
+        /* 2. El último elemento actual apunta al nuevo voto */
+        (*pTail)->sig = nuevoVoto;
+        
+        /* 3. El nuevo voto es ahora el último elemento (se actualiza el 'tail') */
+        *pTail = nuevoVoto;
+    }
+}
+
+/* ----------------------------------------------------------------- */
+/* --- IMPLEMENTACION DE FUNCIONES PRINCIPALES --- */
+/* ----------------------------------------------------------------- */
+
+void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    int opcion;
+    int idMesaOperacion;
+    char rutOperacion[100];
+    struct NodoVoto *votoEncontrado;
+
+    /* 1. Validaciones previas */
+    if (eleccionActual == NULL) {
+        printf("Error: No existe una eleccion activa.\n");
+        esperarEnter();
+        return;
+    }
+
+    opcion = 0;
+    do {
+        limpiarPantalla();
+        printf("\n...:: Proceso de Votacion (Vuelta %d) ::...\n", eleccionActual->numerovuelta);
+        printf("------------------------------------------------\n");
+        printf(" 1. Registrar un Voto (Simulacion)\n");
+        printf(" 2. Listar Votos de una Mesa\n"); 
+        printf(" 3. Buscar Voto por RUT y Mesa\n"); 
+        printf(" 4. Eliminar Voto (Anulación) por RUT\n"); 
+        printf(" 5. Modificar Voto (Cambiar Candidato)\n");
+        printf(" 0. Volver al Menu Principal\n");
+        printf("------------------------------------------------\n");
+
+        opcion = ingresarOpcion();
+
+        switch (opcion) {
+            case 1:
+                registrarVoto(sistema, eleccionActual);
+                break;
+            case 2:
+                /* listarVotos(eleccionActual); -- (Implementacion pendiente) */
+                printf("\nFuncion 'Listar Votos' pendiente de implementacion.\n");
+                esperarEnter();
+                break;
+            case 3:
+                /* Logica de busqueda de voto... */
+                printf("Ingrese ID de la mesa a buscar: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante cuyo voto desea buscar: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                votoEncontrado = buscarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+
+                limpiarPantalla();
+                printf("--- Resultado de la Busqueda ---\n");
+                if (votoEncontrado != NULL) {
+                    printf("¡Voto encontrado en Mesa ID %d!\n", idMesaOperacion);
+                    printf("  RUT del Votante: %s\n", votoEncontrado->rutvotante);
+                    printf("  ID del Candidato Votado: %d\n", votoEncontrado->idcandidatovotado);
+                } else {
+                    printf("Voto del RUT %s no encontrado en Mesa ID %d.\n", rutOperacion, idMesaOperacion);
+                }
+                esperarEnter();
+                break;
+            case 4:
+                /* Logica de eliminacion de voto... */
+                printf("Ingrese ID de la mesa donde se emitio el voto: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante para anular el voto: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                eliminarVoto(sistema, eleccionActual, idMesaOperacion, rutOperacion);
+                break;
+            case 5:
+                /* Logica de modificacion de voto... */
+                printf("Ingrese ID de la mesa del voto a corregir: ");
+                idMesaOperacion = ingresarOpcion();
+                printf("Ingrese RUT del votante cuyo voto desea modificar: ");
+                fgets(rutOperacion, sizeof(rutOperacion), stdin);
+                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
+                
+                modificarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+                break;
+            case 0:
+                printf("Volviendo al menu principal...\n");
+                break;
+            default:
+                printf("Opcion no valida.\n");
+                esperarEnter();
+        }
+    } while (opcion != 0);
+}
+
+/* --- REGISTRO DEL VOTO --- */
+void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    char rutSocio[100];
+    char rutLimpio[11];
+    int idVoto;
+    int indiceCandidato = -1;
+    struct NodoVotante *votante;
+    struct NodoMesa *mesa;
+    struct NodoVoto *nuevoVoto;
+    struct Candidato *candidato = NULL;
+    
+    limpiarPantalla();
+    printf("--- REGISTRO DE VOTO ---\n");
+
+    /* 1. Identificación y Validación del Votante */
+    printf("\nIngrese RUT del votante: ");
+    fgets(rutSocio, sizeof(rutSocio), stdin);
+    rutSocio[strcspn(rutSocio, "\n")] = 0;
+    normalizarRUT(rutLimpio, rutSocio);
+
+    votante = buscarVotante(sistema, rutLimpio);
+
+    if (votante == NULL) {
+        printf("\nError: Votante con RUT %s no encontrado en el padron.\n", rutLimpio);
+        esperarEnter();
+        return;
+    }
+    if (votante->mesaasignada == NULL) {
+        printf("\nError: El votante %s no tiene mesa asignada. No puede votar.\n", votante->nombre);
+        esperarEnter();
+        return;
+    }
+    if (votante->havotado == 1) {
+        printf("\nError: El votante %s (RUT %s) ya ha votado en esta eleccion.\n", votante->nombre, votante->rut);
+        esperarEnter();
+        return;
+    }
+    
+    mesa = votante->mesaasignada;
+    printf("\nVotante verificado: %s (RUT: %s)\n", votante->nombre, votante->rut);
+    printf("Vota en Mesa ID: %d, Comuna: %s.\n", mesa->idmesa, mesa->comuna);
+
+    /* 2. Selección del Candidato */
+    printf("\nIngrese ID del Candidato (o 0 para voto nulo/blanco): ");
+    idVoto = ingresarOpcion();
+
+    /* 3. Mapeo y Búsqueda del Candidato */
+    if (idVoto != 0) {
+        indiceCandidato = obtenerIndiceLocal(eleccionActual, idVoto);
+        
+        /* Si encontramos el índice, recuperamos el puntero al candidato para mostrar su nombre */
+        if (indiceCandidato != -1) {
+            candidato = &eleccionActual->arraycandidatos[indiceCandidato];
+        }
+    }
+    
+    if (idVoto != 0 && indiceCandidato == -1) {
+        printf("\nAdvertencia: ID de candidato no valido. Voto registrado como *NULO*.\n");
+        idVoto = 0; 
+        candidato = NULL;
+    }
+
+    /* 4. Registro del Voto */
+    
+    /* A. Lista Circular (Auditoria) */
+    nuevoVoto = crearNodoVoto(votante->rut, idVoto);
+    if (nuevoVoto == NULL) return;
+    insertarVoto(mesa, nuevoVoto);
+
+    /* B. Contadores (Escrutinio) */
+    mesa->votosemitidos++;
+    votante->havotado = 1; 
+    
+    if (idVoto != 0 && candidato != NULL) {
+        mesa->conteovotos[indiceCandidato]++; 
+        /* Aqui usamos la variable 'candidato' para dar feedback */
+        printf("\n¡Voto valido por %s (ID %d) registrado con exito!\n", candidato->nombre, idVoto);
+    } else {
+        mesa->votos_nulos++; 
+        printf("\n¡Voto registrado como *NULO* con exito!\n");
+    }
+
+    printf("Total de votos en Mesa %d: %d\n", mesa->idmesa, mesa->votosemitidos);
+    esperarEnter();
+}
+
+int eliminarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual, int idMesa, char* rutEliminar) {
+    struct NodoMesa *mesa;
+    struct NodoVoto *actual;
+    struct NodoVoto *anterior;
+    struct NodoVotante *votante;
+    char rutLimpio[11];
+    int idCandidatoEliminado;
+    int indiceCandidato = -1;
+    
+    limpiarPantalla();
+    printf("--- ANULAR VOTO REGISTRADO ---\n");
+    
+    /* 1. Normalizar y buscar la mesa */
+    normalizarRUT(rutLimpio, rutEliminar);
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+
+    if (mesa == NULL || mesa->headlistavotos == NULL) {
+        printf("Error: Mesa %d no encontrada o no tiene votos.\n", idMesa);
+        esperarEnter();
+        return 0;
+    }
+
+    /* 2. Buscar el nodo ANTERIOR al que contiene el RUT */
+    anterior = mesa->headlistavotos; /* Empezamos desde el "tail" */
+    
+    do {
+        actual = anterior->sig; /* 'actual' es el candidato a revisar (el HEAD si estamos en el TAIL) */
+        
+        if (strcmp(actual->rutvotante, rutLimpio) == 0) {
+            
+            /* *¡Voto Encontrado!* */
+            idCandidatoEliminado = actual->idcandidatovotado;
+            
+            /* 3. Gestionar el re-enlace (Eliminacion en Lista Circular) */
+            
+            /* Caso A: La lista contiene UN SOLO NODO */
+            if (anterior == actual) {
+                mesa->headlistavotos = NULL; 
+            }
+            /* Caso B: Eliminar el NODO TAIL (actual == mesa->headlistavotos) */
+            else if (actual == mesa->headlistavotos) {
+                anterior->sig = actual->sig; /* El antepenúltimo apunta al HEAD */
+                mesa->headlistavotos = anterior; /* El anterior es el nuevo TAIL */
+            } 
+            /* Caso C: Eliminar el HEAD o un nodo INTERMEDIO */
+            else {
+                anterior->sig = actual->sig;
+            }
+
+            /* 4. Deshacer el Conteo */
+            mesa->votosemitidos--;
+            
+            if (idCandidatoEliminado != 0) {
+                indiceCandidato = obtenerIndiceLocal(eleccionActual, idCandidatoEliminado);
+                if (indiceCandidato != -1) {
+                    mesa->conteovotos[indiceCandidato]--;
+                }
+            } else {
+                mesa->votos_nulos--; /* Deshacer conteo de nulos */
+            }
+
+            /* 5. Actualizar el estado del votante (si existe) */
+            votante = buscarVotante(sistema, rutLimpio);
+            if (votante != NULL) {
+                votante->havotado = 0; /* Marcar como que ya NO ha votado */
+            }
+            
+            /* 6. Liberacion (Desenlace) */
+            
+            printf("\n Voto de RUT %s en Mesa %d ANULADO. Conteo revertido.\n", rutLimpio, idMesa);
+            esperarEnter();
+            return 1;
+        }
+
+        anterior = anterior->sig; /* Avanzamos el puntero 'anterior' */
+        
+    } while (anterior != mesa->headlistavotos); /* El bucle termina cuando 'anterior' vuelve al TAIL */
+    
+    /* 7. Si el bucle termina sin encontrar el voto */
+    printf("\n Voto de RUT %s no encontrado en Mesa %d.\n", rutLimpio, idMesa);
+    esperarEnter();
+    return 0;
+}
