@@ -1801,3 +1801,228 @@ void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccio
         }
     } while (opcion != 0);
 }
+
+/* ----------------------------------------------------------------- */
+/* --- IMPLEMENTACION FUNCIONES EXTRAS (ESCRUTINIO Y 2DA VUELTA) --- */
+/* ----------------------------------------------------------------- */
+
+/* --- Funciones Auxiliares para Escrutinio --- */
+
+void contarVotosRecursivo(struct NodoMesa *raiz, long *conteoNacional, long *totalNulos, long *totalBlancos, int numCandidatos) {
+    int i;
+    if (raiz == NULL) return;
+
+    /* 1. Recorrer Sub-arbol Izquierdo */
+    contarVotosRecursivo(raiz->izq, conteoNacional, totalNulos, totalBlancos, numCandidatos);
+
+    /* 2. Procesar Mesa Actual: Sumar sus votos al total nacional */
+    *totalNulos += raiz->votos_nulos;
+    *totalBlancos += raiz->votos_blancos;
+    
+    for (i = 0; i < numCandidatos; i++) {
+        /* Sumamos los votos del candidato 'i' en esta mesa al total nacional del candidato 'i' */
+        conteoNacional[i] += raiz->conteovotos[i];
+    }
+
+    /* 3. Recorrer Sub-arbol Derecho */
+    contarVotosRecursivo(raiz->der, conteoNacional, totalNulos, totalBlancos, numCandidatos);
+}
+
+/* --- Funciones Principales del Modulo --- */
+
+/* Realiza el conteo nacional y muestra porcentajes */
+void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
+    long *conteoNacional;
+    long totalNulos = 0, totalBlancos = 0, totalEmitidos = 0, totalValidos = 0;
+    int i;
+    float porcentaje;
+
+    limpiarPantalla();
+    printf("--- ESCRUTINIO NACIONAL (Vuelta %d) ---\n", eleccionActual->numerovuelta);
+
+    if (eleccionActual->raizarbolmesas == NULL) {
+        printf("No hay mesas registradas para realizar el escrutinio.\n");
+        esperarEnter();
+        return;
+    }
+
+    /* Asignamos memoria usando malloc */
+    conteoNacional = (long*)malloc(eleccionActual->numcandidatos * sizeof(long));
+    if (conteoNacional == NULL) {
+        printf("Error de memoria en escrutinio.\n");
+        return;
+    }
+
+    /* se inizializa en 0 manualmente porque malloc puede traer basura */
+    for (i = 0; i < eleccionActual->numcandidatos; i++) {
+        conteoNacional[i] = 0;
+    }
+
+    /* Llamar a la funcion recursiva */
+    contarVotosRecursivo(eleccionActual->raizarbolmesas, conteoNacional, &totalNulos, &totalBlancos, eleccionActual->numcandidatos);
+
+    /* Calcular total de votos validos */
+    for (i = 0; i < eleccionActual->numcandidatos; i++) {
+        totalValidos += conteoNacional[i];
+    }
+    totalEmitidos = totalValidos + totalNulos + totalBlancos;
+
+    printf("Total Votos Emitidos: %ld\n", totalEmitidos);
+    printf("Total Votos Validos:  %ld\n", totalValidos);
+    printf("Total Nulos:          %ld\n", totalNulos);
+    printf("Total Blancos:        %ld\n", totalBlancos);
+    printf("------------------------------------------------\n");
+    printf("RESULTADOS POR CANDIDATO:\n");
+
+    for (i = 0; i < eleccionActual->numcandidatos; i++) {
+        /* Obtener el candidato usando el arreglo de la eleccion actual */
+        struct Candidato *cand = &eleccionActual->arraycandidatos[i];
+        
+        if (totalValidos > 0) {
+            porcentaje = (float)conteoNacional[i] * 100.0 / totalValidos;
+        } else {
+            porcentaje = 0.0;
+        }
+        
+        printf(" %d. %-20s | Votos: %-8ld | %5.2f%%\n", 
+               cand->idcandidato, cand->nombre, conteoNacional[i], porcentaje);
+    }
+    printf("------------------------------------------------\n");
+    
+    esperarEnter();
+}
+
+/* Gestiona la creacion automatica de la 2da vuelta */
+void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
+    struct NodoEleccion *actual, *nuevaVuelta;
+    struct NodoVotante *votanteActual;
+    long *conteoNacional;
+    long totalNulos = 0, totalBlancos = 0, totalValidos = 0;
+    int i;
+    int idx1 = -1, idx2 = -1; 
+    long votos1 = -1, votos2 = -1;
+    int slot1, slot2;
+
+    /* 1. Obtener la ultima eleccion (la actual) */
+    actual = sistema->headelecciones;
+    while (actual->sig != NULL) {
+        actual = actual->sig;
+    }
+
+    if (actual->numerovuelta >= 2) {
+        printf("El sistema ya esta en segunda vuelta (o superior).\n");
+        esperarEnter();
+        return;
+    }
+
+    /* Usamos malloc para asignar memoria */
+    conteoNacional = (long*)malloc(actual->numcandidatos * sizeof(long));
+    if (conteoNacional == NULL) { printf("Error memoria.\n"); return; }
+    
+    for (i = 0; i < actual->numcandidatos; i++) {
+        conteoNacional[i] = 0;
+    }
+    
+    /* 2. Calcular resultados */
+    contarVotosRecursivo(actual->raizarbolmesas, conteoNacional, &totalNulos, &totalBlancos, actual->numcandidatos);
+    
+    for (i = 0; i < actual->numcandidatos; i++) totalValidos += conteoNacional[i];
+
+    if (totalValidos == 0) {
+        printf("No hay votos validos suficientes para calcular resultados.\n");
+        esperarEnter(); return;
+    }
+
+    /* Buscar si alguien gano (>50%) y encontrar los 2 primeros */
+    for (i = 0; i < actual->numcandidatos; i++) {
+        if ((float)conteoNacional[i] / totalValidos > 0.50) {
+            printf("¡El candidato %s ha ganado con mas del 50%% de los votos validos!\n", 
+                   actual->arraycandidatos[i].nombre);
+            printf("No es necesaria una segunda vuelta. ¡Proclamado Presidente Electo!\n");
+            esperarEnter(); return;
+        }
+
+        if (conteoNacional[i] > votos1) {
+            votos2 = votos1; idx2 = idx1;
+            votos1 = conteoNacional[i]; idx1 = i;
+        } else if (conteoNacional[i] > votos2) {
+            votos2 = conteoNacional[i]; idx2 = i;
+        }
+    }
+    
+    if (idx1 == -1 || idx2 == -1) {
+        printf("Error: No hay suficientes candidatos con votos para una segunda vuelta.\n");
+        esperarEnter(); return;
+    }
+
+    /* 3. Crear Segunda Vuelta */
+    limpiarPantalla();
+    printf("--- RESULTADO: NINGUN CANDIDATO OBTUVO MAYORIA ABSOLUTA ---\n");
+    printf("Pasando a Segunda Vuelta los dos mas votados:\n");
+    printf(" 1. %s\n", actual->arraycandidatos[idx1].nombre);
+    printf(" 2. %s\n", actual->arraycandidatos[idx2].nombre);
+    
+    nuevaVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
+    if (nuevaVuelta == NULL) return;
+    
+    nuevaVuelta->numerovuelta = 2;
+    strcpy(nuevaVuelta->fecha, "19-12-2025"); 
+    nuevaVuelta->numcandidatos = 2;
+    nuevaVuelta->raizarbolmesas = NULL;
+    nuevaVuelta->sig = NULL;
+
+    /* 4. Copiar los 2 finalistas al Pool Global */
+    slot1 = plibre++;
+    poolCandidatos[slot1] = actual->arraycandidatos[idx1]; 
+    poolCandidatos[slot1].libre = 0;
+    
+    slot2 = plibre++;
+    poolCandidatos[slot2] = actual->arraycandidatos[idx2]; 
+    poolCandidatos[slot2].libre = 0;
+
+    nuevaVuelta->arraycandidatos = &poolCandidatos[slot1]; 
+
+    /* 5. Habilitar Votantes */
+    votanteActual = sistema->headregistroelectoral;
+    while (votanteActual != NULL) {
+        votanteActual->havotado = 0;
+        votanteActual = votanteActual->sig;
+    }
+
+    /* 6. Enlazar vueltas */
+    actual->sig = nuevaVuelta;
+    
+    printf("\n¡Segunda Vuelta creada exitosamente!\n");
+    printf("Los votantes han sido habilitados nuevamente para el nuevo proceso.\n");
+    printf("Nota: Debe crear nuevas mesas para esta segunda vuelta.\n");
+    esperarEnter();
+}
+
+/* Submenu para Funciones Extras */
+void menuOperacionesEspeciales(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
+    int opcion;
+    do {
+        limpiarPantalla();
+        printf("\n...:: Funciones Extras y Escrutinio (Vuelta %d) ::...\n", eleccionActual->numerovuelta);
+        printf(" 1. Ver Escrutinio Nacional (Informe y %%)\n");
+        printf(" 2. Gestionar Segunda Vuelta (Proclamacion)\n");
+        printf(" 0. Volver al Menu Principal\n");
+        
+        opcion = ingresarOpcion();
+
+        switch (opcion) {
+            case 1:
+                realizarEscrutinioNacional(eleccionActual);
+                break;
+            case 2:
+                gestionarSegundaVuelta(sistema);
+                break;
+            case 0:
+                printf("Volviendo al menu principal...\n");
+                break;
+            default:
+                printf("Opcion no valida.\n");
+                esperarEnter();
+        }
+    } while (opcion != 0);
+}
