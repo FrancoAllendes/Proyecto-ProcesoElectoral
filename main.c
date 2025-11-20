@@ -55,6 +55,7 @@ struct NodoMesa {
 
 struct Candidato {
     int idcandidato;
+    char rut[12];
     char nombre[100];
     char partido[50];
     int edad;
@@ -93,7 +94,7 @@ void limpiarPantalla();
 void limpiarBuffer();
 void esperarEnter();
 int ingresarOpcion();
-void normalizarRUT(char* rutLimpio, char* rutSocio);
+void calcularRutConDV(char* rutSalida, char* rutEntrada);
 
 /* --- Gestion del Registro Electoral (Votantes) --- */
 void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual);
@@ -213,41 +214,60 @@ int main() {
 /* --- IMPLEMENTACION DE FUNCIONES DE UTILIDAD --- */
 /* ----------------------------------------------------------------- */
 
-void normalizarRUT(char* rutLimpio, char* rutSocio) {
-    /* Declaracion de variables (ANSI C) */
-    int i;
-    int j;
-    
-    i = 0; /* Indice para leer el rutSocio */
-    j = 0; /* Indice para escribir en rutLimpio */
+void calcularRutConDV(char* rutSalida, char* rutEntrada) {
+    int i, j, largo, len;
+    int suma = 0;
+    int multiplicador = 2;
+    int resto, dvCalculado;
+    char DigitoVer;
+    char cuerpoLimpio[15];
 
-    /* Recorremos el RUT "sucio" de entrada */
-    while (rutSocio[i] != '\0' && j < 10) { /* j < 10 para evitar desbordar rutLimpio[11] */
-        
-        /* 1. Si es un digito (0-9) o la letra 'k' */
-        if ( (rutSocio[i] >= '0' && rutSocio[i] <= '9') || 
-             (rutSocio[i] == 'k' || rutSocio[i] == 'K') ) 
-        {
-            rutLimpio[j] = rutSocio[i];
-            j++;
+    /* 1. Limpiar la entrada para tener solo numeros */
+    j = 0;
+    for(i = 0; rutEntrada[i] != '\0' && j < 10; i++) {
+        if(rutEntrada[i] >= '0' && rutEntrada[i] <= '9') {
+            cuerpoLimpio[j++] = rutEntrada[i];
         }
-        /* 2. Si es un guion */
-        else if (rutSocio[i] == '-') 
-        {
-            rutLimpio[j] = rutSocio[i];
-            j++;
-        }
-        /* 3. Si es un punto ('.') o un espacio, lo ignoramos */
-        else if (rutSocio[i] == '.' || rutSocio[i] == ' ') 
-        {
-            /* No hacer nada, solo avanzar i */
-        }
-        
-        i++;
     }
+    cuerpoLimpio[j] = '\0';
+    largo = j;
+
+    if (largo == 0) {
+        strcpy(rutSalida, "INVALIDO");
+        return;
+    }
+
+    /* 2. Algoritmo calculo rut */
+    for(i = largo - 1; i >= 0; i--) {
+        suma += (cuerpoLimpio[i] - '0') * multiplicador;
+        multiplicador++;
+        if(multiplicador > 7) multiplicador = 2;
+    }
+
+    resto = suma % 11;
+    dvCalculado = 11 - resto;
+
+    /* 3. Convertir resultado numerico a caracter */
+    if (dvCalculado == 11) DigitoVer = '0';
+    else if (dvCalculado == 10) DigitoVer = 'K';
+    else DigitoVer = dvCalculado + '0';
+
+    /* 4. Formatear Salida MANUALMENTE */
     
-    /* 4. Cerramos el string limpio */
-    rutLimpio[j] = '\0';
+    /* A. Copiamos el cuerpo limpio  */
+    strcpy(rutSalida, cuerpoLimpio);
+    
+    /* B. Buscamos el final de la cadena actual */
+    len = strlen(rutSalida);
+    
+    /* C. Agregamos el guion */
+    rutSalida[len] = '-';
+    
+    /* D. Agregamos el digito verificador */
+    rutSalida[len + 1] = DigitoVer;
+    
+    /* E. IMPORTANTE: Cerrar la cadena con el caracter nulo */
+    rutSalida[len + 2] = '\0';
 }
 
 void limpiarPantalla() {
@@ -676,7 +696,7 @@ struct NodoVotante* crearNodoVotante(char* rut, char* nombre,char* nacionalidad,
 
 /* Pide datos y agrega un nuevo votante al final de la lista doble */
 void agregarVotante(struct SistemaElectoral *sistema) {
-    char rutSocio[100];
+    char rutSucio[100];
     char rutLimpio[11];
     char nombre[100];
     char nacionalidad[50]; 
@@ -712,16 +732,18 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         return; 
     }
 
-    /* 2. Pedir RUT y normalizarlo */
-    printf("Ingrese RUT (ej: 21.776.530-3): ");
-    fgets(rutSocio, sizeof(rutSocio), stdin);
-    rutSocio[strcspn(rutSocio, "\n")] = 0;
-    normalizarRUT(rutLimpio, rutSocio);
+    /* 2. Pedir RUT y Calcula DigitoVer */
+    printf("Ingrese RUT (Solo numeros, SIN puntos ni digito verificador): ");
+    fgets(rutSucio, sizeof(rutSucio), stdin);
+    rutSucio[strcspn(rutSucio, "\n")] = 0;
+    
+    calcularRutConDV(rutLimpio, rutSucio);
+    printf("-> RUT Calculado: %s\n", rutLimpio);
 
     /* 3. Verificar duplicados */
     votanteExistente = buscarVotante(sistema, rutLimpio);
     if (votanteExistente != NULL) {
-        printf("\nError: El RUT %s ya existe en el registro.\n", rutLimpio);
+        printf("Error: Este RUT ya esta registrado.\n");
         esperarEnter();
         return;
     }
@@ -931,11 +953,11 @@ void listarVotantes(struct SistemaElectoral *sistema) {
 
 /* Asigna un Votante (de la lista global) a una Mesa (del arbol de la eleccion) */
 int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
-    char rutSocio[100];
+    char rutSucio[100];
     char rutLimpio[11];
     int idMesa;
     struct NodoVotante* votante;
-    struct NodoMesa* mesa; /* (Necesita 'buscarMesaRec') */
+    struct NodoMesa* mesa; 
 
     limpiarPantalla();
     printf("--- Asignar Votante a Mesa de Votacion ---\n");
@@ -949,11 +971,10 @@ int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *e
     }
 
     /* 2. Pedir y buscar al Votante */
-    printf("Ingrese RUT del votante a asignar: ");
-    fgets(rutSocio, sizeof(rutSocio), stdin);
-    rutSocio[strcspn(rutSocio, "\n")] = 0;
-    normalizarRUT(rutLimpio, rutSocio);
-
+    printf("\nIngrese RUT del votante a asignar (Sin Digito Verificador): ");
+    fgets(rutSucio, sizeof(rutSucio), stdin);
+    rutSucio[strcspn(rutSucio, "\n")] = 0;
+    calcularRutConDV(rutLimpio, rutSucio);
     votante = buscarVotante(sistema, rutLimpio);
     if (votante == NULL) {
         printf("Error: Votante con RUT %s no encontrado.\n", rutLimpio);
@@ -986,7 +1007,7 @@ int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *e
 /* Muestra el submenu para la gestion de votantes */
 void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
     int opcion;
-    char rutSocio[100];
+    char rutSucio[100];
     char rutLimpio[11];
     struct NodoVotante* votanteEncontrado;
 
@@ -1010,13 +1031,12 @@ void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *
                 agregarVotante(sistema);
                 break;
             case 2:
-                printf("Ingrese RUT a buscar: ");
-                fgets(rutSocio, sizeof(rutSocio), stdin);
-                rutSocio[strcspn(rutSocio, "\n")] = 0;
-                normalizarRUT(rutLimpio, rutSocio);
-
+                printf("Ingrese RUT a buscar (Sin Digito Verificador): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                calcularRutConDV(rutLimpio, rutSucio);
+                
                 votanteEncontrado = buscarVotante(sistema, rutLimpio);
-
                 limpiarPantalla();
                 printf("--- Resultado de la Busqueda ---\n");
                 if (votanteEncontrado != NULL) {
@@ -1030,18 +1050,18 @@ void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *
                 esperarEnter();
                 break;
             case 3:
-                printf("Ingrese RUT a modificar: ");
-                fgets(rutSocio, sizeof(rutSocio), stdin);
-                rutSocio[strcspn(rutSocio, "\n")] = 0;
-                normalizarRUT(rutLimpio, rutSocio);
-
+                printf("Ingrese RUT a Modificar (Sin Digito Verificador): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                calcularRutConDV(rutLimpio, rutSucio);
+                
                 modificarVotante(sistema, rutLimpio);
                 break;
             case 4:
-                printf("Ingrese RUT a eliminar: ");
-                fgets(rutSocio, sizeof(rutSocio), stdin);
-                rutSocio[strcspn(rutSocio, "\n")] = 0;
-                normalizarRUT(rutLimpio, rutSocio);
+                printf("Ingrese RUT a Eliminar (Sin Digito Verificador): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                calcularRutConDV(rutLimpio, rutSucio);
 
                 eliminarVotante(sistema, rutLimpio);
                 break;
@@ -1049,7 +1069,6 @@ void menuGestionVotantes(struct SistemaElectoral *sistema, struct NodoEleccion *
                 listarVotantes(sistema);
                 break;
             case 6:
-                /* Ahora 'eleccionActual' esta disponible gracias al parametro */
                 asignarMesaAVotante(sistema, eleccionActual);
                 break;
             case 0:
@@ -1143,6 +1162,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
     int i;
     int slotLibre;
     char nombre[100];
+    char rutSucio[100];
     char partido[50];
     int idCandidatoTemp;
     int candidatoEdad;
@@ -1195,6 +1215,13 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        return;
     }
 
+    printf("Ingrese RUT del Candidato (Sin Digito Verificador): ");
+    fgets(rutSucio, sizeof(rutSucio), stdin);
+    rutSucio[strcspn(rutSucio, "\n")] = 0;
+    
+    /* Validamos y guardamos directamente en el struct del pool */
+    calcularRutConDV(poolCandidatos[slotLibre].rut, rutSucio);
+
     /* 4. Pedir Firmas de Apoyo (si es independiente) */
     printf("Ingrese Firmas de Apoyo (0 si postula por partido): ");
     firmas = ingresarOpcion();
@@ -1225,7 +1252,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        plibre++;
     }
 
-    printf("\n¡Candidato %d (%s) agregado exitosamente en el slot %d!\n",
+    printf("\n¡Candidato %d (RUT: %s) agregado exitosamente en el slot %d!\n",
           poolCandidatos[slotLibre].idcandidato, poolCandidatos[slotLibre].nombre, slotLibre);
     esperarEnter();
 }
@@ -1234,7 +1261,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
 struct Candidato* buscarCandidato(struct NodoEleccion *eleccionActual,int idBuscado) {
     int i;
     
-    printf("   (Buscando en los registros de la Vuelta %d...)\n", eleccionActual->numerovuelta);
+    printf("  (Buscando en los registros de la Vuelta %d...)\n", eleccionActual->numerovuelta);
     
     for (i = 0; i < MAXCANDIDATOS; i++) {
        /* Solo revisar los que no esten marcados como libre */
@@ -1432,9 +1459,9 @@ void insertarVoto(struct NodoMesa *mesa, struct NodoVoto *nuevoVoto) {
 struct NodoVoto* buscarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutBuscado) {
     struct NodoMesa *mesa;
     struct NodoVoto *actual;
-    char rutLimpio[11];
+    char rutLimpio[15];
     
-    normalizarRUT(rutLimpio, rutBuscado);
+    calcularRutConDV(rutLimpio, rutBuscado);
 
     mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
     
@@ -1460,8 +1487,8 @@ struct NodoVoto* buscarVoto(struct NodoEleccion *eleccionActual, int idMesa, cha
 
 /* --- REGISTRO DEL VOTO --- */
 void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
-    char rutSocio[100];
-    char rutLimpio[11];
+    char rutSucio[100];
+    char rutLimpio[15];
     int idVoto;
     int indiceCandidato = -1;
     struct NodoVotante *votante;
@@ -1473,11 +1500,12 @@ void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *elecci
     printf("--- REGISTRO DE VOTO ---\n");
 
     /* 1. Identificación y Validación del Votante */
-    printf("\nIngrese RUT del votante: ");
-    fgets(rutSocio, sizeof(rutSocio), stdin);
-    rutSocio[strcspn(rutSocio, "\n")] = 0;
-    normalizarRUT(rutLimpio, rutSocio);
+    printf("\nIngrese RUT del votante (Sin Digito Verificador): ");
+    fgets(rutSucio, sizeof(rutSucio), stdin);
+    rutSucio[strcspn(rutSucio, "\n")] = 0;
 
+    calcularRutConDV(rutLimpio, rutSucio);
+    printf("RUT Procesado: %s\n", rutLimpio);
     votante = buscarVotante(sistema, rutLimpio);
 
     if (votante == NULL) {
@@ -1491,14 +1519,13 @@ void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *elecci
         return;
     }
     if (votante->havotado == 1) {
-        printf("\nError: El votante %s (RUT %s) ya ha votado en esta eleccion.\n", votante->nombre, votante->rut);
+        printf("\nError: El votante %s ya ha votado.\n", votante->nombre);
         esperarEnter();
         return;
     }
     
     mesa = votante->mesaasignada;
-    printf("\nVotante verificado: %s (RUT: %s)\n", votante->nombre, votante->rut);
-    printf("Vota en Mesa ID: %d, Comuna: %s.\n", mesa->idmesa, mesa->comuna);
+    printf("\nVotante: %s. Mesa: %d\n", votante->nombre, mesa->idmesa);
 
     /* 2. Selección del Candidato */
     printf("\nIngrese ID del Candidato (o 0 para voto nulo/blanco): ");
@@ -1515,7 +1542,7 @@ void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *elecci
     }
     
     if (idVoto != 0 && indiceCandidato == -1) {
-        printf("\nAdvertencia: ID de candidato no valido. Voto registrado como *NULO*.\n");
+        printf("\nAdvertencia: ID invalido. Voto se registrara como NULO.\n");
         idVoto = 0; 
         candidato = NULL;
     }
@@ -1546,20 +1573,20 @@ void registrarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *elecci
 
 int eliminarVoto(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual, int idMesa, char* rutEliminar) {
     struct NodoMesa *mesa;
-    struct NodoVoto *actual;
-    struct NodoVoto *anterior;
+    struct NodoVoto *actual, *anterior;
     struct NodoVotante *votante;
-    char rutLimpio[11];
+    char rutLimpio[15];
     int idCandidatoEliminado;
     int indiceCandidato = -1;
     
     limpiarPantalla();
     printf("--- ANULAR VOTO REGISTRADO ---\n");
     
-    /* 1. Normalizar y buscar la mesa */
-    normalizarRUT(rutLimpio, rutEliminar);
-    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
+    /* 1. Calcular DigitoVer y buscar la mesa */
+    calcularRutConDV(rutLimpio, rutEliminar);
+    printf("Procesando anulacion para RUT: %s\n", rutLimpio);
 
+    mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
     if (mesa == NULL || mesa->headlistavotos == NULL) {
         printf("Error: Mesa %d no encontrada o no tiene votos.\n", idMesa);
         esperarEnter();
@@ -1638,7 +1665,7 @@ int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModi
 
     voto = buscarVoto(eleccionActual, idMesa, rutModificar);
     if (voto == NULL) {
-        printf("Voto no encontrado.\n");
+        printf("Error: No se encontro el voto para el RUT ingresado en esa mesa.\n");
         esperarEnter();
         return 0;
     }
@@ -1646,7 +1673,7 @@ int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModi
     mesa = buscarMesaRec(eleccionActual->raizarbolmesas, idMesa);
     
     printf("Voto actual por candidato ID: %d\n", voto->idcandidatovotado);
-    printf("Ingrese NUEVO ID de Candidato (0 para nulo): ");
+    printf("Ingrese NUEVO ID de Candidato (0 para nulo/blanco): ");
     nuevoId = ingresarOpcion();
 
     /* Validar nuevo ID */
@@ -1654,31 +1681,33 @@ int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModi
     if (nuevoId != 0) {
         idxNuevo = obtenerIndiceLocal(eleccionActual, nuevoId);
         if (idxNuevo == -1) {
-            printf("ID invalido.\n");
+            printf("Error: El ID %d no corresponde a un candidato activo.\n", nuevoId);
             esperarEnter();
             return 0;
         }
     }
-
+    /* Actualizamos los contadores */
     /* Revertir conteo antiguo */
     antiguoId = voto->idcandidatovotado;
     if (antiguoId != 0) {
         idxAntiguo = obtenerIndiceLocal(eleccionActual, antiguoId);
-        if (idxAntiguo != -1) mesa->conteovotos[idxAntiguo]--;
+        if (idxAntiguo != -1) { 
+        mesa->conteovotos[idxAntiguo]--;
+        }
     } else {
         mesa->votos_nulos--;
     }
 
     /* Aplicar nuevo conteo */
-    voto->idcandidatovotado = nuevoId;
     if (nuevoId != 0) {
         mesa->conteovotos[idxNuevo]++;
-        printf("Voto modificado a ID %d.\n", nuevoId);
+        printf("Contador actualizado: +1 para candidato ID %d.\n", nuevoId);
     } else {
         mesa->votos_nulos++;
-        printf("Voto modificado a NULO.\n");
+        printf("Contador actualizado: +1 para Nulos/Blancos.\n");
     }
-
+    voto->idcandidatovotado = nuevoId;
+    printf("\n✅ Modificacion completada con exito.\n");
     esperarEnter();
     return 1;
 }
@@ -1718,7 +1747,8 @@ void listarVotos(struct NodoEleccion *eleccionActual) {
 void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
     int opcion;
     int idMesaOperacion;
-    char rutOperacion[100];
+    char rutSucio[100];
+    char rutLimpio[15];
     struct NodoVoto *votoEncontrado;
 
     /* 1. Validaciones previas */
@@ -1752,14 +1782,15 @@ void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccio
                 esperarEnter();
                 break;
             case 3:
-                /* Logica de busqueda de voto... */
                 printf("Ingrese ID de la mesa a buscar: ");
                 idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante cuyo voto desea buscar: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
                 
-                votoEncontrado = buscarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+                printf("Ingrese RUT del votante (Sin Digito Verificador): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                calcularRutConDV(rutLimpio, rutSucio);
+                
+                votoEncontrado = buscarVoto(eleccionActual, idMesaOperacion, rutLimpio);
 
                 limpiarPantalla();
                 printf("--- Resultado de la Busqueda ---\n");
@@ -1768,29 +1799,29 @@ void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccio
                     printf("  RUT del Votante: %s\n", votoEncontrado->rutvotante);
                     printf("  ID del Candidato Votado: %d\n", votoEncontrado->idcandidatovotado);
                 } else {
-                    printf("Voto del RUT %s no encontrado en Mesa ID %d.\n", rutOperacion, idMesaOperacion);
+                    printf("Voto del RUT %s no encontrado en Mesa ID %d.\n", rutLimpio, idMesaOperacion);
                 }
                 esperarEnter();
                 break;
             case 4:
-                /* Logica de eliminacion de voto... */
                 printf("Ingrese ID de la mesa donde se emitio el voto: ");
                 idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante para anular el voto: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
                 
-                eliminarVoto(sistema, eleccionActual, idMesaOperacion, rutOperacion);
+                printf("Ingrese RUT del votante para anular (Sin DV): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                
+                eliminarVoto(sistema, eleccionActual, idMesaOperacion, rutSucio);
                 break;
             case 5:
-                /* Logica de modificacion de voto... */
                 printf("Ingrese ID de la mesa del voto a corregir: ");
                 idMesaOperacion = ingresarOpcion();
-                printf("Ingrese RUT del votante cuyo voto desea modificar: ");
-                fgets(rutOperacion, sizeof(rutOperacion), stdin);
-                rutOperacion[strcspn(rutOperacion, "\n")] = 0;
                 
-                modificarVoto(eleccionActual, idMesaOperacion, rutOperacion);
+                printf("Ingrese RUT del votante (Sin DV): ");
+                fgets(rutSucio, sizeof(rutSucio), stdin);
+                rutSucio[strcspn(rutSucio, "\n")] = 0;
+                
+                modificarVoto(eleccionActual, idMesaOperacion, rutSucio);
                 break;
             case 0:
                 printf("Volviendo al menu principal...\n");
