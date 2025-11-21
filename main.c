@@ -137,6 +137,9 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema);
 int main() {
     /* 1. Inicializar el Sistema */
     struct SistemaElectoral sistema;
+    struct NodoEleccion *primeraVuelta = NULL;
+    struct NodoEleccion *eleccionActual = NULL;
+    int opcion = 0;
     sistema.headelecciones = NULL;
     sistema.headregistroelectoral = NULL; /* Puntero 'head' de la Lista Doble de Votantes */
     sistema.tailregistroelectoral = NULL; /* Puntero 'tail' de la Lista Doble de Votantes */
@@ -144,7 +147,7 @@ int main() {
     /* 2. Logica para crear e inicializar la Primera Vuelta */
     inicializarPoolCandidatos();
     /* (Creamos la primera vuelta y la enganchamos al sistema) */
-    struct NodoEleccion *primeraVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
+    primeraVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
     primeraVuelta->numerovuelta = 1;
     strcpy(primeraVuelta->fecha, "19-11-2025"); /* Fecha de ejemplo */
     primeraVuelta->arraycandidatos = NULL; /* Se llena con PLibre */
@@ -156,8 +159,7 @@ int main() {
     
     /* (Fin de la inicializacion) */
 
-    int opcion = 0;
-    struct NodoEleccion *eleccionActual = sistema.headelecciones;
+    eleccionActual = sistema.headelecciones;
     
     do {
         limpiarPantalla();
@@ -1707,7 +1709,7 @@ int modificarVoto(struct NodoEleccion *eleccionActual, int idMesa, char *rutModi
         printf("Contador actualizado: +1 para Nulos/Blancos.\n");
     }
     voto->idcandidatovotado = nuevoId;
-    printf("\n✅ Modificacion completada con exito.\n");
+    printf("\n Modificacion completada con exito.\n");
     esperarEnter();
     return 1;
 }
