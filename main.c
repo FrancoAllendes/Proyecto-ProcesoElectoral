@@ -714,7 +714,7 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     printf("--- Agregar Votante al Registro Electoral ---\n");
 
     /* 1. Validacion de Nacionalidad y Edad  */
-    printf("¿El votante posee nacionalidad Chilena? (1: Si / 0: No): ");
+    printf("El votante posee nacionalidad Chilena? (1: Si / 0: No): ");
     esChileno = ingresarOpcion();
 
     if (esChileno != 1) {
@@ -800,7 +800,7 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         sistema->tailregistroelectoral = nuevoNodo;
     }
 
-    printf("\n¡Votante agregado exitosamente!\n");
+    printf("Votante agregado exitosamente\n");
     if (strcmp(pais, "Chile") != 0) {
         printf("(Registrado como votante en el extranjero: %s)\n", pais);
     }
@@ -1254,7 +1254,7 @@ void agregarCandidato(struct NodoEleccion *eleccionActual) {
        plibre++;
     }
 
-    printf("\n¡Candidato %d (RUT: %s) agregado exitosamente en el slot %d!\n",
+    printf("\n¡Candidato %d (Nombre: %s) agregado exitosamente en el slot %d!\n",
           poolCandidatos[slotLibre].idcandidato, poolCandidatos[slotLibre].nombre, slotLibre);
     esperarEnter();
 }
