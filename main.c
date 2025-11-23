@@ -472,6 +472,12 @@ void agregarMesa(struct NodoEleccion *eleccionActual) {
     printf("Ingrese ID numerico para la mesa (ej: 101): ");
     idMesa = ingresarOpcion();
     
+    if (buscarMesaRec(eleccionActual->raizarbolmesas, idMesa) != NULL) {
+        printf("Error: La mesa con ID %d ya existe.\n", idMesa);
+        esperarEnter();
+        return;
+    }
+
     printf("Ingrese Comuna: ");
     fgets(comuna, sizeof(comuna), stdin);
     comuna[strcspn(comuna, "\n")] = 0;
@@ -978,8 +984,16 @@ int asignarMesaAVotante(struct SistemaElectoral *sistema, struct NodoEleccion *e
     rutSucio[strcspn(rutSucio, "\n")] = 0;
     calcularRutConDV(rutLimpio, rutSucio);
     votante = buscarVotante(sistema, rutLimpio);
+    
     if (votante == NULL) {
         printf("Error: Votante con RUT %s no encontrado.\n", rutLimpio);
+        esperarEnter();
+        return 0;
+    }
+    /*validar si tiene mesa*/
+    if (votante->mesaasignada != NULL) {
+        printf("Error: El votante %s ya tiene asignada la Mesa %d.\n", 
+               votante->nombre, votante->mesaasignada->idmesa);
         esperarEnter();
         return 0;
     }
@@ -1367,26 +1381,20 @@ int eliminarCandidato(struct NodoEleccion *eleccionActual, int idEliminar) {
 /* Muestra un listado de todos los candidatos activos */
 void listarCandidatos(struct NodoEleccion *eleccionActual) {
     int i;
+    struct Candidato cand;
 
     limpiarPantalla();
     printf("--- Listado de Candidatos Activos (Vuelta %d) ---\n", eleccionActual->numerovuelta);
-    printf(" Total: %d/%d\n", eleccionActual->numcandidatos, MAXCANDIDATOS);
-    printf("--------------------------------------------------\n");
-
+    
     if (eleccionActual->numcandidatos == 0) {
        printf(" (No hay candidatos registrados)\n");
        esperarEnter();
        return;
     }
 
-    for (i = 0; i < MAXCANDIDATOS; i++) {
-       /* Solo mostrar los que no esten marcados como libre */
-       if (poolCandidatos[i].libre == 0) {
-           printf("  -> ID: %-5d | Nombre: %-30s | Partido: %s\n",
-                  poolCandidatos[i].idcandidato,
-                  poolCandidatos[i].nombre,
-                  poolCandidatos[i].partido);
-       }
+    for (i = 0; i < eleccionActual->numcandidatos; i++) {
+        cand = eleccionActual->arraycandidatos[i];
+        printf("  -> ID: %-5d | Nombre: %-30s | Partido: %s\n",cand.idcandidato, cand.nombre, cand.partido);
     }
 
     esperarEnter();
@@ -1742,7 +1750,6 @@ void listarVotos(struct NodoEleccion *eleccionActual) {
         actual = actual->sig;
     } while (actual != mesa->headlistavotos->sig); /* Hasta volver al principio */
 
-    esperarEnter();
 }
 
 void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccionActual) {
@@ -1866,8 +1873,10 @@ void contarVotosRecursivo(struct NodoMesa *raiz, long *conteoNacional, long *tot
 void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
     long *conteoNacional;
     long totalNulos = 0, totalBlancos = 0, totalEmitidos = 0, totalValidos = 0;
-    int i;
+    int i, j;
     float porcentaje;
+    struct Candidato *cand;
+    int idx;
 
     limpiarPantalla();
     printf("--- ESCRUTINIO NACIONAL (Vuelta %d) ---\n", eleccionActual->numerovuelta);
@@ -1893,10 +1902,17 @@ void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
     /* Llamar a la funcion recursiva */
     contarVotosRecursivo(eleccionActual->raizarbolmesas, conteoNacional, &totalNulos, &totalBlancos);
 
-    /* Calcular total de votos validos */
-    for (i = 0; i < MAXCANDIDATOS; i++) {
-        totalValidos += conteoNacional[i];
+    /* Calcular totales solo de candidatos activos en esta vuelta */
+    for (j = 0; j < eleccionActual->numcandidatos; j++) {
+        cand = &eleccionActual->arraycandidatos[j];
+        /* Calculo de indice restando punteros */
+        idx = (int)(cand - poolCandidatos); 
+        
+        if (idx >= 0 && idx < MAXCANDIDATOS) {
+            totalValidos += conteoNacional[idx];
+        }
     }
+
     totalEmitidos = totalValidos + totalNulos + totalBlancos;
 
     printf("Total Votos Emitidos: %ld\n", totalEmitidos);
@@ -1906,38 +1922,42 @@ void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
     printf("------------------------------------------------\n");
     printf("RESULTADOS POR CANDIDATO:\n");
 
-    for (i = 0; i < MAXCANDIDATOS; i++) {
-        /* Solo mostrar si el candidato NO esta libre (es decir, existe) */
-        if (poolCandidatos[i].libre == 0) {
-            
-            if (totalValidos > 0) {
-                porcentaje = (float)conteoNacional[i] * 100.0 / totalValidos;
-            } else {
-                porcentaje = 0.0;
-            }
-            
-            /* Usamos poolCandidatos directamente para asegurar datos consistentes */
-            printf(" %d. %-20s | Votos: %-8ld | %5.2f%%\n", 
-                   poolCandidatos[i].idcandidato, 
-                   poolCandidatos[i].nombre, 
-                   conteoNacional[i], 
-                   porcentaje);
+    for (j = 0; j < eleccionActual->numcandidatos; j++) {
+        cand = &eleccionActual->arraycandidatos[j];
+        idx = (int)(cand - poolCandidatos); /* Obtenemos el indice en el pool */
+        
+        if (totalValidos > 0) {
+            porcentaje = (float)conteoNacional[idx] * 100.0 / totalValidos;
+        } else {
+            porcentaje = 0.0;
         }
+        
+        printf(" %d. %-20s | Votos: %-8ld | %5.2f%%\n", 
+               cand->idcandidato, 
+               cand->nombre, 
+               conteoNacional[idx], 
+               porcentaje);
     }
+    
     printf("------------------------------------------------\n");
     esperarEnter();
 }
 
 /* Gestiona la creacion automatica de la 2da vuelta */
 void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
-    struct NodoEleccion *actual, *nuevaVuelta;
+    struct NodoEleccion *actual;
+    struct NodoEleccion *nuevaVuelta;
     struct NodoVotante *votanteActual;
     long *conteoNacional;
     long totalNulos = 0, totalBlancos = 0, totalValidos = 0;
+    long votos1 = -1;
+    long votos2 = -1;
+    long maxVotos = -1;
     int i;
     int idx1 = -1, idx2 = -1; 
-    long votos1 = -1, votos2 = -1;
     int slot1, slot2;
+    int ganadorIdx = -1;
+    float porcentaje;
 
     /* 1. Obtener la ultima eleccion (la actual) */
     actual = sistema->headelecciones;
@@ -1945,15 +1965,17 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
         actual = actual->sig;
     }
 
-    if (actual->numerovuelta >= 2) {
-        printf("El sistema ya esta en segunda vuelta (o superior).\n");
+    if (actual->numerovuelta > 2) {
+        printf("El proceso electoral ha finalizado (Ya hubo segunda vuelta).\n");
         esperarEnter();
         return;
     }
 
     /* Usamos malloc para asignar memoria */
     conteoNacional = (long*)malloc(MAXCANDIDATOS * sizeof(long));
-    if (conteoNacional == NULL) { printf("Error memoria.\n"); return; }
+    if (conteoNacional == NULL) { 
+        printf("Error memoria.\n"); return; 
+    }
     
     for (i = 0; i < MAXCANDIDATOS; i++) {
         conteoNacional[i] = 0;
@@ -1962,34 +1984,66 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
     /* 2. Calcular resultados */
     contarVotosRecursivo(actual->raizarbolmesas, conteoNacional, &totalNulos, &totalBlancos);
     
-    for (i = 0; i < MAXCANDIDATOS; i++) totalValidos += conteoNacional[i];
+    for (i = 0; i < actual->numcandidatos; i++) {
+        totalValidos += conteoNacional[i];
+    }
 
     if (totalValidos == 0) {
         printf("No hay votos validos suficientes para calcular resultados.\n");
-        esperarEnter(); return;
+        esperarEnter(); 
+        return;
+    }
+    /* --- LOGICA DE DECISION --- */
+
+    /* CASO A: ESTAMOS EN SEGUNDA VUELTA -> PROCLAMAR GANADOR (Mayoria Simple) */
+    if (actual->numerovuelta == 2) {
+        ganadorIdx = -1;
+        maxVotos = -1;
+
+        for (i = 0; i < actual->numcandidatos; i++) {
+             if (conteoNacional[i] > maxVotos) {
+                 maxVotos = conteoNacional[i];
+                 ganadorIdx = i;
+             }
+        }
+        
+        limpiarPantalla();
+        printf("--- RESULTADOS FINALES SEGUNDA VUELTA ---\n");
+        if (ganadorIdx != -1) {
+            porcentaje = (float)maxVotos * 100.0 / totalValidos;
+            printf("TENEMOS PRESIDENTE ELECTO!\n");
+            printf("Ganador: %s\n", actual->arraycandidatos[ganadorIdx].nombre);
+            printf("Votos: %ld (%.2f%%)\n", maxVotos, porcentaje);
+        } else {
+            printf("Empate o sin datos.\n");
+        }
+        esperarEnter();
+        return; /* Fin del proceso */
     }
 
-    for (i = 0; i < MAXCANDIDATOS; i++) {
-        /* Solo considerar candidatos activos */
-        if (poolCandidatos[i].libre == 0) {
-            
-            if ((float)conteoNacional[i] / totalValidos > 0.50) {
-                printf("¡El candidato %s ha ganado con mas del 50%%!\n", 
-                       poolCandidatos[i].nombre);
-                esperarEnter(); return;
-            }
-
-            if (conteoNacional[i] > votos1) {
-                votos2 = votos1; idx2 = idx1;
-                votos1 = conteoNacional[i]; idx1 = i;
-            } else if (conteoNacional[i] > votos2) {
-                votos2 = conteoNacional[i]; idx2 = i;
-            }
+    /* CASO B: ESTAMOS EN PRIMERA VUELTA -> BUSCAR 50% O FINALISTAS */
+    
+    /* Buscar si alguien gano (>50%) */
+    for (i = 0; i < actual->numcandidatos; i++) {
+         if ((float)conteoNacional[i] / totalValidos > 0.50) {
+            printf("El candidato %s ha ganado con mas del 50%%\n", 
+                   actual->arraycandidatos[i].nombre);
+            printf("No es necesaria una segunda vuelta.\n");
+            esperarEnter(); 
+            return;
+        }
+        
+        /* Buscar los 2 mayores para posible segunda vuelta */
+        if (conteoNacional[i] > votos1) {
+            votos2 = votos1; idx2 = idx1;
+            votos1 = conteoNacional[i]; idx1 = i;
+        } else if (conteoNacional[i] > votos2) {
+            votos2 = conteoNacional[i]; idx2 = i;
         }
     }
     
     if (idx1 == -1 || idx2 == -1) {
-        printf("Error: No hay suficientes candidatos para una segunda vuelta.\n");
+        printf("Error: No hay suficientes candidatos con votos para segunda vuelta.\n");
         esperarEnter(); return;
     }
 
@@ -1997,8 +2051,8 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
     limpiarPantalla();
     printf("--- PASANDO A SEGUNDA VUELTA ---\n");
     printf("Finalistas:\n");
-    printf(" 1. %s\n", poolCandidatos[idx1].nombre);
-    printf(" 2. %s\n", poolCandidatos[idx2].nombre);
+    printf(" 1. %s (Votos: %ld)\n", actual->arraycandidatos[idx1].nombre, votos1);
+    printf(" 2. %s (Votos: %ld)\n", actual->arraycandidatos[idx2].nombre, votos2);
     
     nuevaVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
     if (nuevaVuelta == NULL) return;
@@ -2009,31 +2063,31 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
     nuevaVuelta->raizarbolmesas = NULL;
     nuevaVuelta->sig = NULL;
 
-    /* 4. Copiar los 2 finalistas a nuevos slots del Pool */
-    /* Esto mantiene sus datos pero crea nuevas entradas para la 2da vuelta */
+    /* 4. Preparar candidatos para la nueva vuelta */
     
+    /* Finalista 1 -> Slot nuevo */
     slot1 = plibre++;
-    poolCandidatos[slot1] = poolCandidatos[idx1]; 
+    poolCandidatos[slot1] = actual->arraycandidatos[idx1]; 
     poolCandidatos[slot1].libre = 0;
     
+    /* Finalista 2 -> Slot nuevo */
     slot2 = plibre++;
-    poolCandidatos[slot2] = poolCandidatos[idx2]; 
+    poolCandidatos[slot2] = actual->arraycandidatos[idx2]; 
     poolCandidatos[slot2].libre = 0;
 
-    /* En la logica de PLibre, arraycandidatos apunta al pool global */
-    nuevaVuelta->arraycandidatos = poolCandidatos; 
+    nuevaVuelta->arraycandidatos = &poolCandidatos[slot1]; 
 
-    /* 5. Habilitar Votantes */
+    /* 5. Habilitar Votantes (Resetear havotado) */
     votanteActual = sistema->headregistroelectoral;
     while (votanteActual != NULL) {
         votanteActual->havotado = 0;
         votanteActual = votanteActual->sig;
     }
 
-    /* 6. Enlazar */
+    /* 6. Enlazar la nueva vuelta */
     actual->sig = nuevaVuelta;
     
-    printf("\n¡Segunda Vuelta creada exitosamente!\n");
+    printf("\nSegunda Vuelta creada exitosamente\n");
     printf("Los votantes han sido habilitados nuevamente.\n");
     printf("Nota: Debe crear nuevas mesas para esta segunda vuelta.\n");
     esperarEnter();
