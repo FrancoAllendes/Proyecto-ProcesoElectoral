@@ -713,6 +713,7 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     char region[50];
     int votanteEdad;
     int esChileno;
+    int opResidencia;
     struct NodoVotante* nuevoNodo;
     struct NodoVotante* votanteExistente;
 
@@ -729,7 +730,6 @@ void agregarVotante(struct SistemaElectoral *sistema) {
         esperarEnter();
         return;
     }
-    strcpy(nacionalidad, "Chilena");
     strcpy(nacionalidad, "Chilena");
 
     printf("Ingrese EDAD del votante: ");
@@ -761,39 +761,51 @@ void agregarVotante(struct SistemaElectoral *sistema) {
     fgets(nombre, sizeof(nombre), stdin);
     nombre[strcspn(nombre, "\n")] = 0;
 
-    /* 4. Gestion de Residencia (Chile vs Extranjero)  */
-    printf("Ingrese Pais de Residencia (Escriba 'Chile' si reside en el pais): ");
-    fgets(pais, sizeof(pais), stdin);
-    pais[strcspn(pais, "\n")] = 0;
-    
-    if (strcmp(pais, "Chile") == 0 || strcmp(pais, "chile") == 0) {
-        printf("Ingrese Region: ");
-        fgets(region, sizeof(region), stdin);
-        region[strcspn(region, "\n")] = 0;
-        
-        printf("Ingrese Comuna: ");
-        fgets(comuna, sizeof(comuna), stdin);
-        comuna[strcspn(comuna, "\n")] = 0;
-    } else {
-        /* Si es extranjero, usamos region/comuna para ciudad/estado */
-        printf("Votante en el Extranjero detectado.\n");
-        printf("Ingrese Ciudad de Residencia (se guardara como Comuna): ");
-        fgets(comuna, sizeof(comuna), stdin);
-        comuna[strcspn(comuna, "\n")] = 0;
-        
-        printf("Ingrese Estado/Provincia (se guardara como Region): ");
-        fgets(region, sizeof(region), stdin);
-        region[strcspn(region, "\n")] = 0;
+    /* 5. Gestion de Residencia (Con SWITCH 1/0)  */
+    do {
+        printf("¿Reside en Chile actualmente? (1: Si / 0: No): ");
+        opResidencia = ingresarOpcion();
+        if (opResidencia != 0 && opResidencia != 1) {
+            printf("Opcion no valida. Ingrese 1 o 0.\n");
+        }
+    } while (opResidencia != 0 && opResidencia != 1);
+
+    switch (opResidencia) {
+        case 1: /* Vive en Chile */
+            strcpy(pais, "Chile");
+            
+            printf("Ingrese Region: ");
+            fgets(region, sizeof(region), stdin);
+            region[strcspn(region, "\n")] = 0;
+            
+            printf("Ingrese Comuna: ");
+            fgets(comuna, sizeof(comuna), stdin);
+            comuna[strcspn(comuna, "\n")] = 0;
+            break;
+            
+        case 0: /* Vive en el Extranjero */
+            printf("Ingrese Pais de Residencia: ");
+            fgets(pais, sizeof(pais), stdin);
+            pais[strcspn(pais, "\n")] = 0;
+            
+            printf("Ingrese Estado/Provincia (se guardara como Region): ");
+            fgets(region, sizeof(region), stdin);
+            region[strcspn(region, "\n")] = 0;
+
+            printf("Ingrese Ciudad de Residencia (se guardara como Comuna): ");
+            fgets(comuna, sizeof(comuna), stdin);
+            comuna[strcspn(comuna, "\n")] = 0;
+            break;
     }
 
-    /* 5. Crear el nodo */
+    /* 6. Crear el nodo */
     nuevoNodo = crearNodoVotante(rutLimpio, nombre, nacionalidad, pais, region, comuna);
     if (nuevoNodo == NULL) return;
     
     nuevoNodo->edad = votanteEdad;
     nuevoNodo->havotado = 0;
     
-    /* 6. Insertar al final de la Lista Doblemente Enlazada */
+    /* 7. Insertar al final de la Lista Doblemente Enlazada */
     nuevoNodo->ant = sistema->tailregistroelectoral;
 
     if (sistema->headregistroelectoral == NULL) {
@@ -1307,7 +1319,7 @@ int modificarCandidato(struct NodoEleccion *eleccionActual, int idModificar) {
     }
 
     /* Si se encontro, mostrar la info */
-    printf("\n¡Candidato encontrado (ID: %d)!\n", candidato->idcandidato);
+    printf("Candidato encontrado (ID: %d)!\n", candidato->idcandidato);
     printf("  Nombre: %s\n", candidato->nombre);
     printf("  Partido: %s\n", candidato->partido);
     esperarEnter();
@@ -1318,7 +1330,7 @@ int modificarCandidato(struct NodoEleccion *eleccionActual, int idModificar) {
     printf(" 1. Nombre: %s\n", candidato->nombre);
     printf(" 2. Partido: %s\n", candidato->partido);
     printf(" 0. Cancelar\n");
-    printf("\n¿Que desea modificar?\n");
+    printf("Que desea modificar?\n");
 
     opcion = ingresarOpcion();
 
@@ -1328,14 +1340,14 @@ int modificarCandidato(struct NodoEleccion *eleccionActual, int idModificar) {
            fgets(buffer, sizeof(buffer), stdin);
            buffer[strcspn(buffer, "\n")] = 0;
            strcpy(candidato->nombre, buffer);
-           printf("¡Nombre actualizado!\n");
+           printf("Nombre actualizado!\n");
            break;
        case 2:
            printf("Ingrese nuevo Partido: ");
            fgets(buffer, sizeof(buffer), stdin);
            buffer[strcspn(buffer, "\n")] = 0;
            strcpy(candidato->partido, buffer);
-           printf("¡Partido actualizado!\n");
+           printf("Partido actualizado!\n");
            break;
        case 0:
            printf("Modificacion cancelada.\n");
