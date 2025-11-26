@@ -48,9 +48,9 @@ struct NodoMesa {
     char comuna[50];
     char region[50];
     int votosemitidos;
-    long *conteovotos;
-    long votos_nulos;
-    long votos_blancos;
+    int *conteovotos;
+    int votos_nulos;
+    int votos_blancos;
     struct NodoVoto *headlistavotos;
     struct NodoMesa *izq;
     struct NodoMesa *der;
@@ -318,7 +318,7 @@ struct NodoMesa* crearNodoMesa(int id, char* com, char* reg) {
     nuevo->izq = NULL;
     nuevo->der = NULL;
     
-    nuevo->conteovotos = (long*)malloc(MAXCANDIDATOS * sizeof(long));
+    nuevo->conteovotos = (int*)malloc(MAXCANDIDATOS * sizeof(int));
     if (nuevo->conteovotos == NULL) {
         printf("ERROR FATAL: No hay memoria para contadores de votos.\n");
         return NULL;
@@ -1381,7 +1381,7 @@ void listarCandidatos(struct NodoEleccion *eleccionActual) {
 
 /* --- Funciones Auxiliares  --- */
 
-/* Mapea el ID de un candidato al indice localdel arreglo conteovotos */
+/* Mapea el ID de un candidato al indice locaiel arreglo conteovotos */
 int obtenerIndiceLocal(struct NodoEleccion *eleccionActual, int idCandidato) {
     int i;
     for (i = 0; i < MAXCANDIDATOS; i++) {
@@ -1798,7 +1798,7 @@ void menuVotacion(struct SistemaElectoral *sistema, struct NodoEleccion *eleccio
 /* ----------------------------------------------------------------- */
 
 /* --- Funciones Auxiliares para Escrutinio --- */
-void contarVotosRecursivo(struct NodoMesa *raiz, long *conteoNacional, long *totalNulos, long *totalBlancos) {
+void contarVotosRecursivo(struct NodoMesa *raiz, int *conteoNacional, int *totalNulos, int *totalBlancos) {
     int i;
     if (raiz == NULL) return;
 
@@ -1818,8 +1818,8 @@ void contarVotosRecursivo(struct NodoMesa *raiz, long *conteoNacional, long *tot
 
 /* Realiza el conteo nacional y muestra porcentajes */
 void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
-    long *conteoNacional;
-    long totalNulos = 0, totalBlancos = 0, totalEmitidos = 0, totalValidos = 0;
+    int *conteoNacional;
+    int totalNulos = 0, totalBlancos = 0, totalEmitidos = 0, totalValidos = 0;
     int i, j;
     float porcentaje;
     struct Candidato *cand;
@@ -1834,7 +1834,7 @@ void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
         return;
     }
 
-    conteoNacional = (long*)malloc(MAXCANDIDATOS * sizeof(long));
+    conteoNacional = (int*)malloc(MAXCANDIDATOS * sizeof(int));
     if (conteoNacional == NULL) {
         printf("Error de memoria en escrutinio.\n");
         return;
@@ -1857,10 +1857,10 @@ void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
 
     totalEmitidos = totalValidos + totalNulos + totalBlancos;
 
-    printf("Total Votos Emitidos: %ld\n", totalEmitidos);
-    printf("Total Votos Validos:  %ld\n", totalValidos);
-    printf("Total Nulos:          %ld\n", totalNulos);
-    printf("Total Blancos:        %ld\n", totalBlancos);
+    printf("Total Votos Emitidos: %i\n", totalEmitidos);
+    printf("Total Votos Validos:  %i\n", totalValidos);
+    printf("Total Nulos:          %i\n", totalNulos);
+    printf("Total Blancos:        %i\n", totalBlancos);
     printf("------------------------------------------------\n");
     printf("RESULTADOS POR CANDIDATO:\n");
 
@@ -1874,7 +1874,7 @@ void realizarEscrutinioNacional(struct NodoEleccion *eleccionActual) {
             porcentaje = 0.0;
         }
         
-        printf(" %d. %-20s | Votos: %-8ld | %5.2f%%\n", 
+        printf(" %d. %-20s | Votos: %-8i | %5.2f%%\n", 
                cand->idcandidato, 
                cand->nombre, 
                conteoNacional[idx], 
@@ -1890,11 +1890,11 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
     struct NodoEleccion *actual;
     struct NodoEleccion *nuevaVuelta;
     struct NodoVotante *votanteActual;
-    long *conteoNacional;
-    long totalNulos = 0, totalBlancos = 0, totalValidos = 0;
-    long votos1 = -1;
-    long votos2 = -1;
-    long maxVotos = -1;
+    int *conteoNacional;
+    int totalNulos = 0, totalBlancos = 0, totalValidos = 0;
+    int votos1 = -1;
+    int votos2 = -1;
+    int maxVotos = -1;
     int i;
     int idx1 = -1, idx2 = -1; 
     int slot1, slot2;
@@ -1912,7 +1912,7 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
         return;
     }
 
-    conteoNacional = (long*)malloc(MAXCANDIDATOS * sizeof(long));
+    conteoNacional = (int*)malloc(MAXCANDIDATOS * sizeof(int));
     if (conteoNacional == NULL) { 
         printf("Error memoria.\n"); return; 
     }
@@ -1951,7 +1951,7 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
             porcentaje = (float)maxVotos * 100.0 / totalValidos;
             printf("TENEMOS PRESIDENTE ELECTO!\n");
             printf("Ganador: %s\n", actual->arraycandidatos[ganadorIdx].nombre);
-            printf("Votos: %ld (%.2f%%)\n", maxVotos, porcentaje);
+            printf("Votos: %i (%.2f%%)\n", maxVotos, porcentaje);
         } else {
             printf("Empate o sin datos.\n");
         }
@@ -1984,8 +1984,8 @@ void gestionarSegundaVuelta(struct SistemaElectoral *sistema) {
     limpiarPantalla();
     printf("--- PASANDO A SEGUNDA VUELTA ---\n");
     printf("Finalistas:\n");
-    printf(" 1. %s (Votos: %ld)\n", actual->arraycandidatos[idx1].nombre, votos1);
-    printf(" 2. %s (Votos: %ld)\n", actual->arraycandidatos[idx2].nombre, votos2);
+    printf(" 1. %s (Votos: %i)\n", actual->arraycandidatos[idx1].nombre, votos1);
+    printf(" 2. %s (Votos: %i)\n", actual->arraycandidatos[idx2].nombre, votos2);
     
     nuevaVuelta = (struct NodoEleccion*)malloc(sizeof(struct NodoEleccion));
     if (nuevaVuelta == NULL) return;
