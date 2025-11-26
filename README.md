@@ -64,3 +64,4 @@ El núcleo del sistema está construido sobre una arquitectura de datos robusta 
 2.  Abrir la carpeta del proyecto con cualquier IDE Recomendado (o compilar manualmente los archivos fuente `*.c`).
 3.  Compilar y ejecutar el programa principal.
 4.  Navegar por el menú interactivo que se presentará en la consola.
+5.  Para visualizar le menu del SERVEL usar clave '1234'
